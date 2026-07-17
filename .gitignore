@@ -1,0 +1,72 @@
+# ─────────────────────────────────────────────────────────────
+# JustSaid .gitignore
+# Android + Gradle + C++/NDK/JNI, with HARD blocks on model weights.
+# ─────────────────────────────────────────────────────────────
+
+# ── Android / Gradle ──
+*.iml
+.gradle/
+local.properties
+.idea/
+.DS_Store
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex
+release/
+app/release/
+
+# ── Signing (NEVER commit) ──
+*.jks
+*.keystore
+keystore.properties
+
+# ── Kotlin / Java ──
+*.class
+*.log
+hs_err_pid*
+
+# ── NDK / C++ build artifacts ──
+obj/
+libs/
+*.o
+*.a
+*.so.debug
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# NOTE: compiled .so libraries produced by our own CMake build are ignored,
+# but the whisper.cpp / llama.cpp SOURCE checkouts under app/src/main/cpp/
+# are vendored on purpose. Keep sources, drop build output.
+app/src/main/cpp/**/build/
+app/.cxx/
+
+# ── MODEL WEIGHTS — HARD BLOCK (these are downloaded at runtime, never vendored) ──
+# Any accidental drag-drop of a multi-hundred-MB weight file must be refused by git.
+*.gguf
+*.ggml
+*.bin
+*.q4_0
+*.q4_1
+*.q5_0
+*.q5_1
+*.tflite
+*.task
+models/
+**/assets/models/
+app/src/main/assets/models/
+
+# ── Test / benchmark audio fixtures over size (keep small mocks, drop big wavs) ──
+# Small fixtures live in app/src/test/resources/fixtures/*.wav and are force-added.
+*.wav
+!app/src/test/resources/fixtures/*.wav
+
+# ── Misc ──
+*.tmp
+*.swp
+.env
