@@ -35,26 +35,30 @@ android {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
 
-        externalNativeBuild {
-            cmake {
-                // GGML backends. Vulkan is toggled per-device at runtime via loader;
-                // here we just compile with NNAPI/Vulkan support flags.
-                cppFlags += "-std=c++17"
-                arguments += listOf(
-                    "-DGGML_VULKAN=OFF",   // enable per-ABI in CMakeLists after device matrix testing
-                    "-DWHISPER_BUILD_TESTS=OFF",
-                    "-DWHISPER_BUILD_EXAMPLES=OFF"
-                )
-            }
-        }
+        // TODO(Phase 3): Restore the native build once src/main/cpp/CMakeLists.txt
+        // (whisper.cpp / llama.cpp JNI) exists. Phase 1 has no native code, and
+        // pointing at the missing CMakeLists breaks :app:assembleDebug.
+        // externalNativeBuild {
+        //     cmake {
+        //         // GGML backends. Vulkan is toggled per-device at runtime via loader;
+        //         // here we just compile with NNAPI/Vulkan support flags.
+        //         cppFlags += "-std=c++17"
+        //         arguments += listOf(
+        //             "-DGGML_VULKAN=OFF",   // enable per-ABI in CMakeLists after device matrix testing
+        //             "-DWHISPER_BUILD_TESTS=OFF",
+        //             "-DWHISPER_BUILD_EXAMPLES=OFF"
+        //         )
+        //     }
+        // }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-            version = "3.22.1"
-        }
-    }
+    // TODO(Phase 3): Restore alongside the defaultConfig block above.
+    // externalNativeBuild {
+    //     cmake {
+    //         path = file("src/main/cpp/CMakeLists.txt")
+    //         version = "3.22.1"
+    //     }
+    // }
 
     buildTypes {
         release {
@@ -150,6 +154,8 @@ dependencies {
     testImplementation("io.mockk:mockk:1.13.13")
     testImplementation("com.google.truth:truth:1.4.4")
     testImplementation("androidx.room:room-testing:2.6.1")
+    // MockWebServer drives ModelDownloaderTest (Range resume, checksum reject, progress).
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
 
     // ── Instrumented / Espresso tests ──
     androidTestImplementation("androidx.test.ext:junit:1.2.1")

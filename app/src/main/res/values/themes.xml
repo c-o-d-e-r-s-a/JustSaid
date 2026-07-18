@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Minimal window theme. The real UI theme (colors, typography, high contrast,
+      large text) is defined in Compose under ui/theme/. This only styles the
+      Activity window before Compose draws its first frame.
+    -->
+    <style name="Theme.JustSaid" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@android:color/white</item>
+        <item name="android:statusBarColor">@android:color/white</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+</resources>

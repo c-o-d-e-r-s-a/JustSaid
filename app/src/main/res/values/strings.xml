@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JustSaid</string>
+
+    <!-- ── Legal / consent screen ── -->
+    <string name="legal_title">Before you start</string>
+    <string name="legal_body">JustSaid works entirely on this phone. It can listen to a phone call, write down what was said, and pull out the tasks and promises for you. Nothing is ever sent to the internet or to us.\n\nRecording calls is not allowed everywhere. In some places you must tell the other person that the call is being recorded, and in some places everyone must agree first.\n\nBy tapping \u201cI Agree\u201d you confirm that:\n\n\u2022 You will follow the call-recording laws where you live.\n\u2022 You will get the other person\u2019s permission when it is required.\n\u2022 You are responsible for how you use what JustSaid writes down.\n\nJustSaid stores everything privately on this phone only. You can delete it at any time.</string>
+    <string name="legal_agree_button">I Agree</string>
+    <string name="legal_agree_content_desc">Agree to the terms and continue</string>
+
+    <!-- ── Download screen ── -->
+    <string name="download_title">Getting JustSaid ready</string>
+    <string name="download_subtitle">We\u2019re downloading the files that let JustSaid understand calls. This happens only once.</string>
+    <string name="download_wifi_note">This is a large download. Please use Wi\u2011Fi if you can, to avoid using up your mobile data.</string>
+    <string name="download_overall_label">Overall progress</string>
+    <string name="download_retry_button">Try again</string>
+    <string name="download_retry_content_desc">Try the download again</string>
+    <string name="download_error">Something went wrong while downloading. Please check your connection and try again.</string>
+    <string name="download_progress_mb">%1$s of %2$s MB</string>
+    <string name="download_percent">%1$d%%</string>
+    <string name="download_done">All set! Opening JustSaid\u2026</string>
+
+    <!-- ── Home placeholder ── -->
+    <string name="home_title">You\u2019re all set</string>
+    <string name="home_subtitle">JustSaid is ready. The rest of the app arrives in the next updates.</string>
+</resources>

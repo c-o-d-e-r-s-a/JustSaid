@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backups are disabled (android:allowBackup="false"). These rules are a
+  defense-in-depth belt-and-braces: even if backup were ever enabled, the
+  model weights, cache (transient .wav lives here), and the encrypted DB
+  passphrase must NEVER leave the device. See docs/00-CONSTITUTION.md (A2).
+-->
+<full-backup-content>
+    <exclude domain="file" path="models/" />
+    <exclude domain="cache" />
+    <exclude domain="sharedpref" path="justsaid_secure_prefs.xml" />
+</full-backup-content>
