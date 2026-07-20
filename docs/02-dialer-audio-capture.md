@@ -19,6 +19,13 @@ Make JustSaid a usable **default dialer** that:
 5. On disconnect (if LISTEN was ON), hands the finished `.wav` + metadata to the
    pipeline entry point (Phase 3/4) and shows the loading modal.
 
+> **Deferred to a later phase (maintainer decision):** an outgoing-call UI
+> (keypad + recent calls + contact search firing `ACTION_CALL`) is **not** built
+> here. As the default phone app JustSaid currently has no way to *place* a call
+> from within the app — only to observe/handle calls placed elsewhere. This is a
+> known UX gap tracked for a future phase; it is intentionally out of scope for
+> the Phase 2 crash fix.
+
 ## Why not androidx core-telecom / CallsManager?
 
 `androidx.core-telecom` `CallsManager#addCall` is for apps that **place their

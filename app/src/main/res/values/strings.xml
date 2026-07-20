@@ -23,4 +23,36 @@
     <!-- ── Home placeholder ── -->
     <string name="home_title">You\u2019re all set</string>
     <string name="home_subtitle">JustSaid is ready. The rest of the app arrives in the next updates.</string>
+    <string name="home_dialer_prompt">To listen to your calls, JustSaid needs to be your phone app.</string>
+    <string name="home_set_dialer_button">Make JustSaid my phone app</string>
+    <string name="home_set_dialer_content_desc">Make JustSaid the default phone app</string>
+    <string name="home_dialer_active">JustSaid is your phone app.</string>
+    <string name="home_permissions_prompt">JustSaid needs your permission to hear calls and show who is calling.</string>
+    <string name="home_permissions_button">Allow permissions</string>
+    <string name="home_permissions_content_desc">Allow the permissions JustSaid needs</string>
+    <string name="home_permissions_active">All permissions granted.</string>
+
+    <!-- ── In-call screen ── -->
+    <string name="incall_unknown_caller">Unknown caller</string>
+    <string name="incall_phase_ringing">Incoming call</string>
+    <string name="incall_phase_active">On call</string>
+    <string name="incall_phase_held">On hold</string>
+    <string name="incall_phase_disconnected">Call ended</string>
+    <string name="incall_listen_on">\uD83D\uDD34 Listening for lists</string>
+    <string name="incall_listen_off">\uD83D\uDD34 Listen for lists</string>
+    <string name="incall_listen_content_desc_on">Listening is on. Tap to stop listening for lists.</string>
+    <string name="incall_listen_content_desc_off">Listening is off. Tap to listen for lists on this call.</string>
+    <string name="incall_answer">Answer</string>
+    <string name="incall_answer_content_desc">Answer the call</string>
+    <string name="incall_hangup">Hang up</string>
+    <string name="incall_hangup_content_desc">Hang up the call</string>
+    <string name="incall_processing">Going through your call\u2026</string>
+
+    <!-- ── Call notification ── -->
+    <string name="incall_channel_name">Ongoing calls</string>
+    <string name="incall_channel_desc">Shows a notification while a call is in progress.</string>
+    <string name="incall_notification_title">JustSaid call</string>
+
+    <!-- ── Optional spoken recording notice (off by default) ── -->
+    <string name="tts_recording_notice">This call is being recorded for AI assistance.</string>
 </resources>

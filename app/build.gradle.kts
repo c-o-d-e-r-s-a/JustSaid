@@ -28,7 +28,8 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Custom runner installs HiltTestApplication so @HiltAndroidTest works (Phase 2).
+        testInstrumentationRunner = "com.justsaid.app.HiltTestRunner"
 
         ndk {
             // ARM only — 99% of target devices. Drop x86 to keep APK small.
