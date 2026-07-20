@@ -4,12 +4,12 @@ import android.content.Context
 import com.justsaid.app.audio.AudioRecordTierProbe
 import com.justsaid.app.audio.AudioSourceFactory
 import com.justsaid.app.audio.CallPipeline
-import com.justsaid.app.audio.NoOpCallPipeline
 import com.justsaid.app.audio.RealAudioSourceFactory
 import com.justsaid.app.audio.WavFileProvider
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.data.contacts.ContactResolver
 import com.justsaid.app.data.contacts.ContactResolverImpl
+import com.justsaid.app.pipeline.CallPipelineImpl
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -51,7 +51,7 @@ abstract class CaptureBindsModule {
 
     @Binds
     @Singleton
-    abstract fun bindCallPipeline(impl: NoOpCallPipeline): CallPipeline
+    abstract fun bindCallPipeline(impl: CallPipelineImpl): CallPipeline
 
     @Binds
     @Singleton

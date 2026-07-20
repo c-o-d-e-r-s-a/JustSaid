@@ -44,10 +44,19 @@ adb shell "cd /data/local/tmp && ./whisper-cli -m ggml-base-q5_0.bin -f fixture.
 ### A.3 llama.cpp summarizer bench
 
 ```bash
-# from app/src/main/cpp/llama.cpp
+# from app/src/main/cpp/llama.cpp — build the CLI once:
+cmake -B build -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_TOOLS=ON
+cmake --build build -j --config Release
+
 ./build/bin/llama-cli -m models/llama-3.2-3b-instruct-q4_k_m.gguf \
-  -p "$(cat ../../test/resources/fixtures/system_prompt.txt)$(cat ../../test/resources/fixtures/sample_transcript.txt)" \
-  -n 512 --temp 0.1
+  -p "$(cat ../../../test/resources/fixtures/system_prompt.txt)$(cat ../../../test/resources/fixtures/sample_transcript.txt)" \
+  -n 512 --temp 0.1 --no-warmup -no-cnv
+
+# On-device variant (mirrors A.2):
+adb push build/bin/llama-cli /data/local/tmp/
+adb push models/llama-3.2-3b-instruct-q4_k_m.gguf /data/local/tmp/
+adb shell "cd /data/local/tmp && ./llama-cli -m llama-3.2-3b-instruct-q4_k_m.gguf \
+  -p \"$(cat prompt.txt)\" -n 512 --temp 0.1 -no-cnv"
 ```
 
 Verify: output obeys the `Task/Item [Qty] (Proof: "quote")` format and that

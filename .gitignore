@@ -65,6 +65,8 @@ app/src/main/assets/models/
 # Small fixtures live in app/src/test/resources/fixtures/*.wav and are force-added.
 *.wav
 !app/src/test/resources/fixtures/*.wav
+# Phase 3 JNI smoke fixture (11 s speech sample, ~350 KB).
+!app/src/androidTest/assets/fixtures/*.wav
 
 # ── Misc ──
 *.tmp
