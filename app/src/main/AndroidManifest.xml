@@ -77,6 +77,18 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone" />
 
+        <!-- Shares exported PDF/Text summaries (Phase 5). Scoped strictly to the
+             export cache dir — see res/xml/export_paths.xml. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/export_paths" />
+        </provider>
+
     </application>
 
 </manifest>

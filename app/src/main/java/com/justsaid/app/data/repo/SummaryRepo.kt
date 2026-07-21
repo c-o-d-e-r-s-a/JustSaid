@@ -5,8 +5,7 @@ import com.justsaid.app.core.JustSaidResult
 
 /**
  * Phase 5 boundary: persists validated summaries to the encrypted DB. Phase 4 only
- * depends on this interface (bound to [InMemorySummaryRepo] until Phase 5 lands the
- * Room/SQLCipher implementation).
+ * depends on this interface; the Room/SQLCipher implementation is [RoomSummaryRepo].
  */
 interface SummaryRepo {
     /** Persists [summary] and returns it with its storage id assigned. */

@@ -47,6 +47,12 @@
     <string name="incall_hangup">Hang up</string>
     <string name="incall_hangup_content_desc">Hang up the call</string>
     <string name="incall_processing">Going through your call\u2026</string>
+    <string name="incall_capture_failed">Couldn\'t hear this call. Turn on Speaker, then tap Listen again.</string>
+    <string name="incall_speaker_hint">Turn on Speaker so JustSaid can hear both of you.</string>
+    <string name="incall_speaker_on">Speaker is on</string>
+    <string name="incall_speaker_off">Speaker</string>
+    <string name="incall_speaker_content_desc_on">Speakerphone is on. Tap to use the earpiece.</string>
+    <string name="incall_speaker_content_desc_off">Speakerphone is off. Tap to put the call on speaker.</string>
 
     <!-- ── Call notification ── -->
     <string name="incall_channel_name">Ongoing calls</string>
@@ -55,4 +61,68 @@
 
     <!-- ── Optional spoken recording notice (off by default) ── -->
     <string name="tts_recording_notice">This call is being recorded for AI assistance.</string>
+
+    <!-- ── Summary screen ── -->
+    <string name="summary_title_with">Call with %1$s</string>
+    <string name="summary_unconfirmed">Unconfirmed</string>
+    <string name="summary_no_items">No tasks or promises were found in this call.</string>
+    <string name="summary_save_button">\uD83D\uDCBE Save to History</string>
+    <string name="summary_save_content_desc">Save this summary to your history</string>
+    <string name="summary_saved_button">\u2713 Saved to History</string>
+    <string name="summary_saved_content_desc">This summary is saved in your history</string>
+    <string name="summary_send_button">\u2709\uFE0F Send to %1$s via SMS</string>
+    <string name="summary_send_content_desc">Send this summary to %1$s as a text message</string>
+    <string name="summary_done_button">Done</string>
+    <string name="summary_done_content_desc">Close this summary</string>
+    <string name="summary_quantity">[%1$s]</string>
+
+    <!-- ── History ── -->
+    <string name="history_title">Saved calls</string>
+    <string name="history_open_button">\uD83D\uDCD6 Saved calls</string>
+    <string name="history_open_content_desc">See your saved call summaries</string>
+    <string name="history_empty">Nothing saved yet. After a call, tap Save to keep the summary here.</string>
+    <string name="history_row_content_desc">Open the summary of the call with %1$s</string>
+    <string name="history_item_count">%1$d tasks</string>
+    <string name="history_export_all_button">Share everything</string>
+    <string name="history_export_all_content_desc">Share all saved summaries as one file</string>
+    <string name="history_back_content_desc">Go back</string>
+
+    <!-- ── History detail ── -->
+    <string name="detail_export_button">\uD83D\uDCC4 Share as file</string>
+    <string name="detail_export_content_desc">Share this summary as a file</string>
+    <string name="detail_delete_button">\uD83D\uDDD1 Delete</string>
+    <string name="detail_delete_content_desc">Delete this summary forever</string>
+    <string name="detail_delete_confirm_title">Delete this summary?</string>
+    <string name="detail_delete_confirm_body">This summary will be removed from this phone. This cannot be undone.</string>
+    <string name="detail_delete_confirm_yes">Yes, delete it</string>
+    <string name="detail_delete_confirm_no">Keep it</string>
+    <string name="detail_not_found">This summary is no longer on this phone.</string>
+
+    <!-- ── Settings ── -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_open_button">\u2699\uFE0F Settings</string>
+    <string name="settings_open_content_desc">Open settings</string>
+    <string name="settings_language_title">Call language</string>
+    <string name="settings_language_desc">Which language JustSaid listens for on your calls.</string>
+    <string name="settings_language_auto">Any language</string>
+    <string name="settings_language_en">English only</string>
+    <string name="settings_language_auto_content_desc">Listen for any language</string>
+    <string name="settings_language_en_content_desc">Listen for English only</string>
+    <string name="settings_tts_title">Spoken notice</string>
+    <string name="settings_tts_desc">Say \u201cthis call is being recorded\u201d out loud when listening starts.</string>
+    <string name="settings_tts_content_desc">Turn the spoken recording notice on or off</string>
+    <string name="settings_cleanup_title">Tidy up old summaries</string>
+    <string name="settings_cleanup_desc">Remove summaries older than 30 days automatically.</string>
+    <string name="settings_cleanup_content_desc">Turn automatic tidy-up of old summaries on or off</string>
+    <string name="settings_clear_button">Clear all history</string>
+    <string name="settings_clear_content_desc">Delete every saved summary</string>
+    <string name="settings_clear_confirm_title">Delete everything?</string>
+    <string name="settings_clear_confirm_body">Every saved call summary will be removed from this phone. This cannot be undone.</string>
+    <string name="settings_clear_confirm_yes">Yes, delete everything</string>
+    <string name="settings_clear_confirm_no">Keep my history</string>
+
+    <!-- ── Export / sharing ── -->
+    <string name="export_share_title">Share the summary</string>
+    <string name="export_failed">Something went wrong while making the file. Please try again.</string>
+    <string name="export_history_heading">JustSaid — Saved call summaries</string>
 </resources>

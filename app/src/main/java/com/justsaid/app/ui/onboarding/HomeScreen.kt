@@ -32,9 +32,12 @@ import androidx.compose.ui.unit.dp
 import com.justsaid.app.R
 import com.justsaid.app.telecom.DialerRole
 
-/** Placeholder landing screen for post-onboarding. Later phases replace this. */
+/** Landing screen: setup cards plus the two Phase 5 destinations (history, settings). */
 @Composable
-fun HomeScreen() {
+fun HomeScreen(
+    onOpenHistory: () -> Unit,
+    onOpenSettings: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -55,6 +58,36 @@ fun HomeScreen() {
 
         DefaultDialerCard()
         CallPermissionsCard()
+
+        val historyDesc = stringResource(R.string.history_open_content_desc)
+        Button(
+            onClick = onOpenHistory,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .semantics { contentDescription = historyDesc },
+        ) {
+            Text(
+                text = stringResource(R.string.history_open_button),
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+            )
+        }
+
+        val settingsDesc = stringResource(R.string.settings_open_content_desc)
+        Button(
+            onClick = onOpenSettings,
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 64.dp)
+                .semantics { contentDescription = settingsDesc },
+        ) {
+            Text(
+                text = stringResource(R.string.settings_open_button),
+                style = MaterialTheme.typography.labelLarge,
+                textAlign = TextAlign.Center,
+            )
+        }
     }
 }
 

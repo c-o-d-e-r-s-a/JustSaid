@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider scope: ONLY the export cache dir. The wav buffer and models
+     live elsewhere and are never shareable through this provider. -->
+<paths>
+    <cache-path name="exports" path="exports/" />
+</paths>

@@ -149,13 +149,22 @@ dependencies {
     testImplementation("androidx.room:room-testing:2.6.1")
     // MockWebServer drives ModelDownloaderTest (Range resume, checksum reject, progress).
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    // Robolectric drives the JVM tests that need a real Android runtime:
+    // SummaryDaoTest (Room), SmsIntentBuilderTest (Intent/Uri), SummaryExporterTest (PdfDocument).
+    testImplementation("org.robolectric:robolectric:4.14.1")
+    testImplementation("androidx.test.ext:junit:1.2.1")
+    testImplementation("androidx.test:core-ktx:1.6.1")
 
     // ── Instrumented / Espresso tests ──
     androidTestImplementation("androidx.test.ext:junit:1.2.1")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
+    // Espresso-Intents asserts the SMS ACTION_SENDTO brokerage (SummaryActionsTest).
+    androidTestImplementation("androidx.test.espresso:espresso-intents:3.6.1")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     androidTestImplementation(composeBom)
     androidTestImplementation("com.google.dagger:hilt-android-testing:2.52")
     androidTestImplementation("com.google.truth:truth:1.4.4")
     kspAndroidTest("com.google.dagger:hilt-compiler:2.52")
+    // Provides the ComponentActivity the createComposeRule tests launch.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
 }

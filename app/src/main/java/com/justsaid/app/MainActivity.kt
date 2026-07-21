@@ -18,32 +18,54 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.justsaid.app.data.repo.HistoryAutoCleanup
 import com.justsaid.app.telecom.DialerRole
 import com.justsaid.app.ui.AppGateViewModel
 import com.justsaid.app.ui.StartRoute
+import com.justsaid.app.ui.history.HistoryDetailScreen
+import com.justsaid.app.ui.history.HistoryScreen
 import com.justsaid.app.ui.incall.InCallScreen
 import com.justsaid.app.ui.incall.InCallViewModel
 import com.justsaid.app.ui.onboarding.DownloadScreen
 import com.justsaid.app.ui.onboarding.HomeScreen
 import com.justsaid.app.ui.onboarding.LegalScreen
+import com.justsaid.app.ui.settings.SettingsScreen
+import com.justsaid.app.ui.summary.SummaryGateViewModel
+import com.justsaid.app.ui.summary.SummaryScreen
 import com.justsaid.app.ui.theme.JustSaidTheme
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /** Nav route ids. */
 object Routes {
     const val LEGAL = "legal"
     const val DOWNLOAD = "download"
     const val HOME = "home"
+    const val SUMMARY = "summary"
+    const val HISTORY = "history"
+    const val HISTORY_DETAIL = "history/{id}"
+    const val SETTINGS = "settings"
+
+    fun historyDetail(id: Long) = "history/$id"
 }
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+
+    @Inject lateinit var autoCleanup: HistoryAutoCleanup
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // T2: prune >30-day-old summaries on app start when the setting is on.
+        lifecycleScope.launch { autoCleanup.runIfEnabled() }
         setContent {
             JustSaidTheme {
                 Surface(modifier = Modifier.fillMaxSize()) {
@@ -107,6 +129,16 @@ private fun AppNavHost(startRoute: StartRoute) {
         StartRoute.HOME -> Routes.HOME
     }
 
+    // Phase 5 handoff: the pipeline published a summary (loading modal just
+    // dismissed) -> open the summary screen once for it.
+    val summaryGate: SummaryGateViewModel = hiltViewModel()
+    val pendingSummary by summaryGate.pending.collectAsState()
+    LaunchedEffect(pendingSummary) {
+        if (pendingSummary != null) {
+            navController.navigate(Routes.SUMMARY) { launchSingleTop = true }
+        }
+    }
+
     NavHost(navController = navController, startDestination = start) {
         composable(Routes.LEGAL) {
             LegalScreen(
@@ -115,11 +147,46 @@ private fun AppNavHost(startRoute: StartRoute) {
         }
         composable(Routes.DOWNLOAD) {
             DownloadScreen(
-                onComplete = { navController.navigateReplacing(Routes.HOME, popFrom = Routes.DOWNLOAD) },
+                // Clears the whole stack: correct for onboarding AND for the
+                // settings-triggered model re-download.
+                onComplete = {
+                    navController.navigate(Routes.HOME) {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable(Routes.HOME) {
-            HomeScreen()
+            HomeScreen(
+                onOpenHistory = { navController.navigate(Routes.HISTORY) },
+                onOpenSettings = { navController.navigate(Routes.SETTINGS) },
+            )
+        }
+        composable(Routes.SUMMARY) {
+            SummaryScreen(
+                onDone = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.HISTORY) {
+            HistoryScreen(
+                onOpenSummary = { id -> navController.navigate(Routes.historyDetail(id)) },
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(
+            route = Routes.HISTORY_DETAIL,
+            arguments = listOf(navArgument("id") { type = NavType.LongType }),
+        ) {
+            HistoryDetailScreen(
+                onBack = { navController.popBackStack() },
+            )
+        }
+        composable(Routes.SETTINGS) {
+            SettingsScreen(
+                onBack = { navController.popBackStack() },
+                onDownloadNeeded = { navController.navigate(Routes.DOWNLOAD) },
+            )
         }
     }
 }
