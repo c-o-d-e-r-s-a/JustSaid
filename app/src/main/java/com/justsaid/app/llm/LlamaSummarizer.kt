@@ -4,6 +4,7 @@ import com.justsaid.app.audio.RecordedCall
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.Transcript
+import com.justsaid.app.summary.CommitmentFallback
 import com.justsaid.app.summary.HallucinationGuard
 import com.justsaid.app.summary.PromiseParser
 import javax.inject.Inject
@@ -39,7 +40,14 @@ class LlamaSummarizer(
             is JustSaidResult.Failure -> return result
         }
 
-        val items = HallucinationGuard.validate(PromiseParser.parse(output), transcript)
+        var items = HallucinationGuard.validate(PromiseParser.parse(output), transcript)
+        // 1B-class models often emit NONE / off-format prose on short mono calls
+        // even when the transcript clearly contains "I will …" commitments. Fall
+        // back to a quote-preserving extractor; HallucinationGuard still drops
+        // anything that is not a literal substring (Constitution G1).
+        if (items.isEmpty()) {
+            items = HallucinationGuard.validate(CommitmentFallback.propose(transcript), transcript)
+        }
 
         return JustSaidResult.Success(
             CallSummary(

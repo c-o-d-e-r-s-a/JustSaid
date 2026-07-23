@@ -26,6 +26,7 @@ object Prompts {
            Task/Item [Quantity] (Proof: "verbatim quote from the speaker who agreed")
         2. The quote inside (Proof: "...") must be copied word-for-word from the
            transcript. Never paraphrase, shorten, or fix grammar inside the quote.
+           Prefer the shortest contiguous phrase that still contains the commitment.
         3. If you cannot support a task with a verbatim quote, do not output it.
         4. Include [Quantity] only when a quantity is explicitly stated in the call.
            Otherwise omit the brackets entirely.
@@ -34,6 +35,13 @@ object Prompts {
         6. Be neutral and concise. No preamble, no closing remarks, no headers,
            no explanations, no creative filler.
         7. If the call contains nothing actionable, output the single word: NONE
+
+        Example — transcript:
+        SPEAKER_?: I will buy 2 liters of milk and I will fix the sink this weekend.
+
+        Example — correct output:
+        Unconfirmed: Buy milk [2 liters] (Proof: "I will buy 2 liters of milk")
+        Unconfirmed: Fix the sink (Proof: "I will fix the sink this weekend")
     """.trimIndent()
 
     /**

@@ -2,11 +2,13 @@ package com.justsaid.app.ui.onboarding
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.justsaid.app.core.DeviceRamInfo
 import com.justsaid.app.data.download.DownloadProgress
 import com.justsaid.app.data.download.FileState
 import com.justsaid.app.data.download.ModelCatalog
 import com.justsaid.app.data.download.ModelDownloader
 import com.justsaid.app.data.download.OverallState
+import com.justsaid.app.data.download.selectRamTier
 import com.justsaid.app.data.repo.SettingsRepo
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -41,6 +43,7 @@ data class DownloadUiState(
 class DownloadViewModel @Inject constructor(
     private val downloader: ModelDownloader,
     private val settingsRepo: SettingsRepo,
+    private val deviceRamInfo: DeviceRamInfo,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(DownloadUiState())
@@ -58,7 +61,8 @@ class DownloadViewModel @Inject constructor(
         job = viewModelScope.launch {
             _state.value = _state.value.copy(isError = false)
             val lock = settingsRepo.sttLanguageLock.first()
-            val specs = ModelCatalog.requiredFor(lock)
+            val ramTier = selectRamTier(deviceRamInfo.totalRamBytes())
+            val specs = ModelCatalog.requiredFor(lock, ramTier)
             downloader.download(specs).collect { progress ->
                 _state.value = progress.toUiState()
             }

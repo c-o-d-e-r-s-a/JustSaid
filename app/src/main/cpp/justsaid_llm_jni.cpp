@@ -51,8 +51,12 @@ struct JsLlmContext {
 std::mutex g_handles_mutex;
 std::unordered_set<jlong> g_live_handles;
 
-constexpr int JS_N_CTX = 4096;
-constexpr int JS_N_BATCH = 512;
+// 2048 (not 4096): mid/low-end phones like Galaxy A14 (~3.6 GB RAM) OOM-kill the
+// process during generation when KV cache + the ~1.8 GB Q4 3B weights peak together.
+// Summaries of short calls fit comfortably; long transcripts still truncate cleanly
+// via the existing "prompt does not fit context" error path.
+constexpr int JS_N_CTX = 2048;
+constexpr int JS_N_BATCH = 256;
 // Fixed seed: deterministic output helps the verbatim-proof guardrail (G1/G4).
 constexpr uint32_t JS_SEED = 42;
 

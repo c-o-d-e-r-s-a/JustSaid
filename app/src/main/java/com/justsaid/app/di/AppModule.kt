@@ -6,8 +6,10 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStoreFile
 import com.justsaid.app.core.DefaultDispatcher
+import com.justsaid.app.core.DeviceRamInfo
 import com.justsaid.app.core.IoDispatcher
 import com.justsaid.app.core.ModelPaths
+import com.justsaid.app.data.DeviceRamInfoImpl
 import com.justsaid.app.data.ModelPathsImpl
 import dagger.Binds
 import dagger.Module
@@ -66,4 +68,8 @@ abstract class BindsModule {
     @Binds
     @Singleton
     abstract fun bindModelPaths(impl: ModelPathsImpl): ModelPaths
+
+    @Binds
+    @Singleton
+    abstract fun bindDeviceRamInfo(impl: DeviceRamInfoImpl): DeviceRamInfo
 }

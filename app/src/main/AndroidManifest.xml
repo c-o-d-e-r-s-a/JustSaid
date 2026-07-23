@@ -77,6 +77,22 @@
             android:exported="false"
             android:foregroundServiceType="phoneCall|microphone" />
 
+        <!-- No-op service; being ENABLED lifts Android's in-call mic silencing for
+             third-party capture (concurrent-capture policy exemption). Reads nothing:
+             see CaptureUnlockAccessibilityService + capture_unlock_service.xml. -->
+        <service
+            android:name=".service.CaptureUnlockAccessibilityService"
+            android:exported="true"
+            android:label="@string/capture_unlock_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/capture_unlock_service" />
+        </service>
+
         <!-- Shares exported PDF/Text summaries (Phase 5). Scoped strictly to the
              export cache dir — see res/xml/export_paths.xml. -->
         <provider

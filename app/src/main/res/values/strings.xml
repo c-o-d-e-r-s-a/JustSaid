@@ -66,6 +66,8 @@
     <string name="summary_title_with">Call with %1$s</string>
     <string name="summary_unconfirmed">Unconfirmed</string>
     <string name="summary_no_items">No tasks or promises were found in this call.</string>
+    <string name="summary_heard_title">What we heard</string>
+    <string name="summary_heard_nothing">We did not catch any words from this call. Try speaking a little louder next time, and keep Listen turned on while you talk.</string>
     <string name="summary_save_button">\uD83D\uDCBE Save to History</string>
     <string name="summary_save_content_desc">Save this summary to your history</string>
     <string name="summary_saved_button">\u2713 Saved to History</string>
@@ -114,6 +116,12 @@
     <string name="settings_cleanup_title">Tidy up old summaries</string>
     <string name="settings_cleanup_desc">Remove summaries older than 30 days automatically.</string>
     <string name="settings_cleanup_content_desc">Turn automatic tidy-up of old summaries on or off</string>
+    <string name="capture_unlock_service_label">JustSaid call listening</string>
+    <string name="capture_unlock_service_desc">Lets JustSaid hear the call while you use the red Listen button. JustSaid never reads your screen, never watches other apps, and never sends anything off this phone.</string>
+    <string name="settings_capture_unlock_title">Allow call listening</string>
+    <string name="settings_capture_unlock_desc">Your phone blocks listening during calls until you switch on \u201cJustSaid call listening\u201d in the Accessibility settings. Tap the button, find JustSaid in the list, and turn it on.</string>
+    <string name="settings_capture_unlock_button">Open phone settings</string>
+    <string name="settings_capture_unlock_content_desc">Open the phone settings page where call listening can be allowed</string>
     <string name="settings_clear_button">Clear all history</string>
     <string name="settings_clear_content_desc">Delete every saved summary</string>
     <string name="settings_clear_confirm_title">Delete everything?</string>

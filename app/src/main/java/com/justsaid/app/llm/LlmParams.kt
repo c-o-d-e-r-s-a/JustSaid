@@ -8,7 +8,9 @@ package com.justsaid.app.llm
  * backend is compiled out (`-DJUSTSAID_VULKAN=OFF`).
  */
 data class LlmParams(
-    val maxTokens: Int = 512,
+    // 256 is enough for a short promise list; 512 inflated peak decode buffers on
+    // mid-range phones that already struggle to keep the 3B weights resident.
+    val maxTokens: Int = 256,
     val temperature: Float = 0.1f,
     val gpuOffloadLayers: Int = ATTEMPT_FULL_OFFLOAD,
 ) {

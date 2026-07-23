@@ -134,9 +134,22 @@ class ModelDownloader @Inject constructor(
                     .copy(bytesDownloaded = spec.sizeBytes, state = FileState.DONE)
             }
 
+            // Drop the unused RAM-tier sibling (e.g. 3B after a 1B download) so
+            // low-RAM phones reclaim ~2 GB of private storage.
+            deleteUnusedLlmSiblings(keep = specs)
             emit(OverallState.SUCCESS)
         }
     }.flowOn(ioDispatcher)
+
+    /** Deletes LLM artifacts that are not in the just-required set. */
+    private fun deleteUnusedLlmSiblings(keep: List<ModelSpec>) {
+        val keepNames = keep.mapTo(HashSet()) { it.fileName }
+        for (llm in ModelCatalog.ALL_LLMS) {
+            if (llm.fileName in keepNames) continue
+            File(modelsDir, llm.fileName).delete()
+            File(modelsDir, llm.fileName + ".part").delete()
+        }
+    }
 
     /**
      * Downloads a single file with resume + checksum verification.
