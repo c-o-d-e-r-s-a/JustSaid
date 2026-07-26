@@ -56,4 +56,15 @@ class AudioRecordTierProbeTest {
         assertThat(probeHasLiveSignal(samplesToRead = 8, read = reader)).isFalse()
         assertThat(calls).isEqualTo(8)
     }
+
+    @Test
+    fun `dual mono selection tries recognition before communication`() {
+        val tried = mutableListOf<Int>()
+        val chosen = selectDualMonoSource { source ->
+            tried += source
+            source == Src.VOICE_COMMUNICATION
+        }
+        assertThat(chosen).isEqualTo(Src.VOICE_COMMUNICATION)
+        assertThat(tried).containsExactly(Src.VOICE_RECOGNITION, Src.VOICE_COMMUNICATION).inOrder()
+    }
 }

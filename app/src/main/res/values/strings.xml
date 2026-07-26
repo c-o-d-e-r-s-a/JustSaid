@@ -49,6 +49,7 @@
     <string name="incall_processing">Going through your call\u2026</string>
     <string name="incall_capture_failed">Couldn\'t hear this call. Turn on Speaker, then tap Listen again.</string>
     <string name="incall_speaker_hint">Turn on Speaker so JustSaid can hear both of you.</string>
+    <string name="incall_speaker_hint_dismiss">Got it</string>
     <string name="incall_speaker_on">Speaker is on</string>
     <string name="incall_speaker_off">Speaker</string>
     <string name="incall_speaker_content_desc_on">Speakerphone is on. Tap to use the earpiece.</string>

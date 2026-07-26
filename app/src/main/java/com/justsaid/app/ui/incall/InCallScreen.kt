@@ -15,6 +15,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -37,6 +38,8 @@ fun InCallScreen(viewModel: InCallViewModel = hiltViewModel()) {
         onToggleListen = viewModel::onToggleListen,
         onAnswer = viewModel::onAnswer,
         onHangup = viewModel::onHangup,
+        onToggleSpeaker = viewModel::onToggleSpeaker,
+        onDismissMicOnlyHint = viewModel::onDismissMicOnlyHint,
     )
 }
 
@@ -47,6 +50,8 @@ fun InCallContent(
     onToggleListen: (Boolean) -> Unit,
     onAnswer: () -> Unit,
     onHangup: () -> Unit,
+    onToggleSpeaker: () -> Unit,
+    onDismissMicOnlyHint: () -> Unit,
 ) {
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -75,6 +80,17 @@ fun InCallContent(
                 capturing = state.isCapturing,
                 onToggle = onToggleListen,
             )
+
+            if (state.phase == CallPhase.ACTIVE || state.phase == CallPhase.HELD) {
+                SpeakerToggle(
+                    speakerOn = state.speakerOn,
+                    onToggle = onToggleSpeaker,
+                )
+            }
+
+            if (state.showMicOnlySpeakerHint) {
+                MicOnlySpeakerHint(onDismiss = onDismissMicOnlyHint)
+            }
 
             Spacer(Modifier.weight(1f))
 
@@ -110,6 +126,47 @@ fun InCallContent(
 
     if (state.showLoadingModal) {
         PostCallLoadingModal()
+    }
+}
+
+@Composable
+private fun SpeakerToggle(
+    speakerOn: Boolean,
+    onToggle: () -> Unit,
+) {
+    val descOn = stringResource(R.string.incall_speaker_content_desc_on)
+    val descOff = stringResource(R.string.incall_speaker_content_desc_off)
+    val label = if (speakerOn) R.string.incall_speaker_on else R.string.incall_speaker_off
+    Button(
+        onClick = onToggle,
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 72.dp)
+            .semantics { contentDescription = if (speakerOn) descOn else descOff },
+    ) {
+        Text(
+            text = stringResource(label),
+            style = MaterialTheme.typography.titleLarge,
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+@Composable
+private fun MicOnlySpeakerHint(onDismiss: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = stringResource(R.string.incall_speaker_hint),
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center,
+        )
+        TextButton(onClick = onDismiss) {
+            Text(stringResource(R.string.incall_speaker_hint_dismiss))
+        }
     }
 }
 

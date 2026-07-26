@@ -3,9 +3,11 @@ package com.justsaid.app.ui.incall
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.justsaid.app.audio.CaptureController
+import com.justsaid.app.audio.CaptureTier
 import com.justsaid.app.audio.PipelineState
 import com.justsaid.app.data.contacts.ContactResolver
 import com.justsaid.app.telecom.CallActions
+import com.justsaid.app.telecom.CallAudioGateway
 import com.justsaid.app.telecom.CallState
 import com.justsaid.app.telecom.CallStateHolder
 import com.justsaid.app.telecom.phoneNumber
@@ -31,6 +33,9 @@ data class InCallUiState(
     val listenEnabled: Boolean = false,
     val isCapturing: Boolean = false,
     val showLoadingModal: Boolean = false,
+    val speakerOn: Boolean = false,
+    val captureTier: CaptureTier? = null,
+    val showMicOnlySpeakerHint: Boolean = false,
 )
 
 /**
@@ -42,10 +47,12 @@ class InCallViewModel @Inject constructor(
     private val callStateHolder: CallStateHolder,
     private val captureController: CaptureController,
     private val callActions: CallActions,
+    private val callAudioGateway: CallAudioGateway,
     private val contactResolver: ContactResolver,
 ) : ViewModel() {
 
     private val displayName = MutableStateFlow("")
+    private val micOnlyHintDismissed = MutableStateFlow(false)
 
     init {
         // Resolve the remote number -> contact name whenever the number changes.
@@ -72,25 +79,51 @@ class InCallViewModel @Inject constructor(
     }
 
     val state: StateFlow<InCallUiState> = combine(
-        callStateHolder.state,
-        captureController.listenEnabled,
-        captureController.isCapturing,
-        captureController.pipelineState,
+        combine(
+            callStateHolder.state,
+            captureController.listenEnabled,
+            captureController.isCapturing,
+            captureController.pipelineState,
+        ) { call, listen, capturing, pipeline ->
+            CallCapturePhase(call, listen, capturing, pipeline)
+        },
+        captureController.activeCaptureTier,
+        callAudioGateway.speakerOn,
         displayName,
-    ) { call, listen, capturing, pipeline, name ->
+        micOnlyHintDismissed,
+    ) { phase, tier, speakerOn, name, hintDismissed ->
+        val showHint = phase.listen &&
+            tier == CaptureTier.MIC_ONLY &&
+            !speakerOn &&
+            !hintDismissed &&
+            phase.call is CallState.Active
         InCallUiState(
-            visible = call !is CallState.Idle,
-            phase = call.toPhase(),
-            displayName = name.ifBlank { call.phoneNumber },
-            listenEnabled = listen,
-            isCapturing = capturing,
-            showLoadingModal = pipeline == PipelineState.PROCESSING,
+            visible = phase.call !is CallState.Idle,
+            phase = phase.call.toPhase(),
+            displayName = name.ifBlank { phase.call.phoneNumber },
+            listenEnabled = phase.listen,
+            isCapturing = phase.capturing,
+            showLoadingModal = phase.pipeline == PipelineState.PROCESSING,
+            speakerOn = speakerOn,
+            captureTier = tier,
+            showMicOnlySpeakerHint = showHint,
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), InCallUiState())
+
+    private data class CallCapturePhase(
+        val call: CallState,
+        val listen: Boolean,
+        val capturing: Boolean,
+        val pipeline: PipelineState,
+    )
 
     fun onToggleListen(enabled: Boolean) = captureController.setListen(enabled)
     fun onAnswer() = callActions.answer()
     fun onHangup() = callActions.hangup()
+    fun onToggleSpeaker() = callAudioGateway.toggleSpeaker()
+    fun onDismissMicOnlyHint() {
+        micOnlyHintDismissed.value = true
+    }
 
     private fun CallState.toPhase(): CallPhase = when (this) {
         is CallState.Idle -> CallPhase.NONE

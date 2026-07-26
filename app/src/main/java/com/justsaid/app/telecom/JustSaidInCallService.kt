@@ -18,12 +18,29 @@ class JustSaidInCallService : InCallService() {
 
     @Inject lateinit var callStateHolder: CallStateHolder
     @Inject lateinit var callActions: CallActions
+    @Inject lateinit var callAudioGateway: CallAudioGateway
 
     // Injected so the singleton capture state machine is alive and observing call state as
     // soon as the framework binds us, even if the UI never opens.
     @Inject lateinit var captureController: CaptureController
 
     private val callbacks = mutableMapOf<Call, Call.Callback>()
+
+    override fun onCreate() {
+        super.onCreate()
+        callAudioGateway.attach(this)
+    }
+
+    override fun onDestroy() {
+        callAudioGateway.detach()
+        super.onDestroy()
+    }
+
+    override fun onCallAudioStateChanged(audioState: android.telecom.CallAudioState?) {
+        if (audioState != null) {
+            callAudioGateway.onCallAudioStateChanged(audioState)
+        }
+    }
 
     override fun onCallAdded(call: Call) {
         super.onCallAdded(call)

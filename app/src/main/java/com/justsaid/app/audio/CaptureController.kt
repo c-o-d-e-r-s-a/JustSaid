@@ -1,5 +1,6 @@
 package com.justsaid.app.audio
 
+import com.justsaid.app.BuildConfig
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.data.contacts.ContactResolver
 import com.justsaid.app.data.repo.SettingsRepo
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -49,6 +51,10 @@ class CaptureController @Inject constructor(
 
     private val _isCapturing = MutableStateFlow(false)
     val isCapturing: StateFlow<Boolean> = _isCapturing.asStateFlow()
+
+    private val _activeCaptureTier = MutableStateFlow<CaptureTier?>(null)
+    /** Tier in use while LISTEN capture is running; null when idle. */
+    val activeCaptureTier: StateFlow<CaptureTier?> = _activeCaptureTier.asStateFlow()
 
     private val _pipelineState = MutableStateFlow(PipelineState.IDLE)
     val pipelineState: StateFlow<PipelineState> = _pipelineState.asStateFlow()
@@ -110,14 +116,25 @@ class CaptureController @Inject constructor(
         finished?.let { if (it.wavFile.exists()) it.wavFile.delete() }
         finished = null
         val source = audioSourceFactory.create()
+        if (BuildConfig.DEBUG) {
+            Log.i(TAG, "capture_start tier=${source.tier} channels=${source.channels}")
+        }
         val file = wavFileProvider.newWavFile()
         val writer = WavWriter(file, channels = source.channels)
         writer.open()
         val contactName = contactResolver.resolve(number)
+        var peak = 0
+        var sawSignal = false
         val job = scope.launch {
-            source.frames().collect { frame -> writer.write(frame) }
+            source.frames().collect { frame ->
+                writer.write(frame)
+                if (frameHasLiveSignal(frame)) sawSignal = true
+                val p = framePeakAmplitude(frame)
+                if (p > peak) peak = p
+            }
         }
-        active = ActiveCapture(source, writer, file, number, contactName, job)
+        active = ActiveCapture(source, writer, file, number, contactName, job, { peak }, { sawSignal })
+        _activeCaptureTier.value = source.tier
         _isCapturing.value = true
     }
 
@@ -128,6 +145,15 @@ class CaptureController @Inject constructor(
         a.job.join()
         a.writer.close()
         _isCapturing.value = false
+        _activeCaptureTier.value = null
+
+        if (BuildConfig.DEBUG) {
+            Log.i(
+                TAG,
+                "capture_stop tier=${a.source.tier} bytes=${a.writer.dataBytes} " +
+                    "peak=${a.peak()} signal=${a.sawSignal()}",
+            )
+        }
 
         if (keep && a.writer.dataBytes > 0L) {
             finished = RecordedCall(
@@ -185,5 +211,11 @@ class CaptureController @Inject constructor(
         val number: String,
         val contactName: String?,
         val job: Job,
+        val peak: () -> Int,
+        val sawSignal: () -> Boolean,
     )
+
+    private companion object {
+        const val TAG = "JustSaidCapture"
+    }
 }

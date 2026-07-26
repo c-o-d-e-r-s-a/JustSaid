@@ -33,7 +33,10 @@ object CaptureModule {
     @Singleton
     fun provideAudioSourceFactory(
         @DefaultDispatcher dispatcher: CoroutineDispatcher,
-    ): AudioSourceFactory = RealAudioSourceFactory(AudioRecordTierProbe(), dispatcher)
+    ): AudioSourceFactory {
+        val probe = AudioRecordTierProbe()
+        return RealAudioSourceFactory(probe, dispatcher)
+    }
 
     /** Fresh private wav in cacheDir per capture (never external storage — Constitution A2). */
     @Provides

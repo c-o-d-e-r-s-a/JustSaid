@@ -74,5 +74,12 @@ internal const val STEREO: Int = AudioFormat.CHANNEL_IN_STEREO
 internal object Src {
     const val VOICE_CALL = MediaRecorder.AudioSource.VOICE_CALL
     const val VOICE_RECOGNITION = MediaRecorder.AudioSource.VOICE_RECOGNITION
+    const val VOICE_COMMUNICATION = MediaRecorder.AudioSource.VOICE_COMMUNICATION
     const val MIC = MediaRecorder.AudioSource.MIC
 }
+
+/** Tier-2 sources to try in order; first with live PCM during a call wins. */
+internal val DUAL_MONO_SOURCES: IntArray = intArrayOf(
+    Src.VOICE_RECOGNITION,
+    Src.VOICE_COMMUNICATION,
+)

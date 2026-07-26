@@ -15,6 +15,12 @@ fun interface TierProbe {
     fun isAvailable(tier: CaptureTier): Boolean
 }
 
+/** Picks which `AudioRecord` source to use for Tier 2 after [TierProbe] approves dual-mono. */
+fun interface DualMonoSourceSelector {
+    /** First source with live signal, or null if none (factory falls back to VR). */
+    fun select(): Int?
+}
+
 /**
  * Pure tier-selection policy: prefer true stereo, then dual-mono, and always fall back to
  * mic-only (which is universally available given RECORD_AUDIO). Never promises stereo.
@@ -31,12 +37,21 @@ fun selectTier(probe: TierProbe): CaptureTier = when {
  */
 class RealAudioSourceFactory(
     private val probe: TierProbe,
+    private val dualMonoSelector: DualMonoSourceSelector,
     private val dispatcher: CoroutineDispatcher,
 ) : AudioSourceFactory {
 
+    constructor(
+        recordProbe: AudioRecordTierProbe,
+        dispatcher: CoroutineDispatcher,
+    ) : this(recordProbe, recordProbe, dispatcher)
+
     override fun create(): AudioSource = when (selectTier(probe)) {
         CaptureTier.STEREO -> VoiceCallAudioSource(dispatcher)
-        CaptureTier.DUAL_MONO -> VoiceRecognitionAudioSource(dispatcher)
+        CaptureTier.DUAL_MONO -> {
+            val source = dualMonoSelector.select() ?: Src.VOICE_RECOGNITION
+            DualMonoAudioSource(source, dispatcher)
+        }
         CaptureTier.MIC_ONLY -> MicAudioSource(dispatcher)
     }
 }

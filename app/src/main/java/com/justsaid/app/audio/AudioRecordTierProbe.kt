@@ -14,18 +14,21 @@ import android.media.AudioRecord
  * factory falls through. MIC is assumed available (it is, given RECORD_AUDIO) so we
  * don't hold the mic just to test it.
  */
-class AudioRecordTierProbe : TierProbe {
+class AudioRecordTierProbe : TierProbe, DualMonoSourceSelector {
 
     @SuppressLint("MissingPermission")
-    override fun isAvailable(tier: CaptureTier): Boolean {
-        if (tier == CaptureTier.MIC_ONLY) return true
+    override fun isAvailable(tier: CaptureTier): Boolean = when (tier) {
+        CaptureTier.MIC_ONLY -> true
+        CaptureTier.DUAL_MONO -> select() != null
+        CaptureTier.STEREO -> probeAudioSource(Src.VOICE_CALL, STEREO)
+    }
 
-        val (source, channelConfig) = when (tier) {
-            CaptureTier.STEREO -> Src.VOICE_CALL to STEREO
-            CaptureTier.DUAL_MONO -> Src.VOICE_RECOGNITION to MONO
-            CaptureTier.MIC_ONLY -> return true
-        }
-
+    @SuppressLint("MissingPermission")
+    override fun select(): Int? = selectDualMonoSource { source ->
+        probeAudioSource(source, MONO)
+    }
+    @SuppressLint("MissingPermission")
+    internal fun probeAudioSource(source: Int, channelConfig: Int): Boolean {
         val minBytes = AudioRecord.getMinBufferSize(
             AudioSource.SAMPLE_RATE,
             channelConfig,
@@ -57,6 +60,18 @@ class AudioRecordTierProbe : TierProbe {
             record.release()
         }
     }
+}
+
+/**
+ * Picks the first dual-mono `AudioRecord` source that delivers non-zero PCM during a call.
+ */
+internal fun selectDualMonoSource(
+    testSource: (source: Int) -> Boolean,
+): Int? {
+    for (source in DUAL_MONO_SOURCES) {
+        if (testSource(source)) return source
+    }
+    return null
 }
 
 /** How much audio the probe listens to before declaring a tier silent. */
