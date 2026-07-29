@@ -111,25 +111,25 @@ fun SummaryBody(summary: CallSummary) {
             text = stringResource(R.string.summary_no_items),
             style = MaterialTheme.typography.bodyLarge,
         )
-        // When nothing survived the guardrails, show what STT heard so the user
-        // (and device tests) can tell "didn't hear you" from "heard you, no tasks".
-        if (summary.fullTranscript.isNotBlank()) {
-            Text(
-                text = stringResource(R.string.summary_heard_title),
-                style = MaterialTheme.typography.titleLarge,
-            )
-            Text(
-                text = summary.fullTranscript,
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        } else {
-            Text(
-                text = stringResource(R.string.summary_heard_nothing),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-        }
     } else {
         summary.items.forEach { PromiseRow(it) }
+    }
+
+    // Full STT text for debugging transcription; also helps when no tasks survived guardrails.
+    if (summary.fullTranscript.isNotBlank()) {
+        Text(
+            text = stringResource(R.string.summary_heard_title),
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            text = summary.fullTranscript,
+            style = MaterialTheme.typography.bodyLarge,
+        )
+    } else if (summary.items.isEmpty()) {
+        Text(
+            text = stringResource(R.string.summary_heard_nothing),
+            style = MaterialTheme.typography.bodyLarge,
+        )
     }
 }
 

@@ -72,3 +72,5 @@ app/src/main/assets/models/
 *.tmp
 *.swp
 .env
+# Local adb / on-device scratch shell scripts (never part of the app).
+.tmp_*.sh
