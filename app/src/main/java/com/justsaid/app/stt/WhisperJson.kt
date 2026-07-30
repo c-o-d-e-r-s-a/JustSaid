@@ -2,7 +2,7 @@ package com.justsaid.app.stt
 
 /**
  * Parser for the fixed JSON shape emitted by `justsaid_whisper_jni.cpp`:
- * `{"segments":[{"t0":<ms>,"t1":<ms>,"text":"..."}]}`.
+ * `{"lang":"<iso>","segments":[{"t0":<ms>,"t1":<ms>,"text":"..."}]}`.
  *
  * Hand-rolled because we control both ends of the wire: org.json is stubbed out in
  * JVM unit tests and pulling a JSON library for one internal message is not worth
@@ -11,6 +11,24 @@ package com.justsaid.app.stt
 internal object WhisperJson {
 
     data class RawSegment(val t0Ms: Long, val t1Ms: Long, val text: String)
+
+    data class TranscriptionChunk(
+        val segments: List<RawSegment>,
+        /** Whisper ISO 639-1 code from this window, or null if missing/invalid. */
+        val detectedLanguage: String?,
+    )
+
+    /** Parses one native transcribe response (segments + optional detected language). */
+    fun parseChunk(json: String): TranscriptionChunk {
+        if (json.isBlank()) return TranscriptionChunk(emptyList(), null)
+        return TranscriptionChunk(parseSegments(json), parseDetectedLanguage(json))
+    }
+
+    /** ISO 639-1 code from the root `"lang"` field; null when absent. */
+    fun parseDetectedLanguage(json: String): String? {
+        val m = Regex(""""lang"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"""").find(json) ?: return null
+        return unescapeJsonString(m.groupValues[1]).takeIf { it.isNotBlank() && it != "auto" }
+    }
 
     /** Returns parsed segments; empty list for blank/malformed input (STT treats it as silence). */
     fun parseSegments(json: String): List<RawSegment> {
@@ -46,6 +64,37 @@ internal object WhisperJson {
     private fun longField(obj: String, name: String): Long? {
         val m = Regex("\"$name\"\\s*:\\s*(-?\\d+)").find(obj) ?: return null
         return m.groupValues[1].toLongOrNull()
+    }
+
+    private fun unescapeJsonString(raw: String): String {
+        val sb = StringBuilder(raw.length)
+        var j = 0
+        while (j < raw.length) {
+            if (raw[j] == '\\' && j + 1 < raw.length) {
+                when (val esc = raw[j + 1]) {
+                    '"' -> sb.append('"')
+                    '\\' -> sb.append('\\')
+                    '/' -> sb.append('/')
+                    'n' -> sb.append('\n')
+                    'r' -> sb.append('\r')
+                    't' -> sb.append('\t')
+                    'b' -> sb.append('\b')
+                    'f' -> sb.append('\u000C')
+                    'u' -> {
+                        val hex = raw.substring(j + 2, (j + 6).coerceAtMost(raw.length))
+                        val code = hex.toIntOrNull(16) ?: return raw
+                        sb.append(code.toChar())
+                        j += 4
+                    }
+                    else -> sb.append(esc)
+                }
+                j += 2
+            } else {
+                sb.append(raw[j])
+                j++
+            }
+        }
+        return sb.toString()
     }
 
     private fun stringField(obj: String, name: String): String? {

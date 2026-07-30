@@ -15,6 +15,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,6 +24,7 @@ import javax.inject.Inject
 /** Immutable state for the settings screen. */
 data class SettingsUiState(
     val languageLock: SttLanguageLock = SttLanguageLock.AUTO,
+    val spokenLanguages: Set<String> = emptySet(),
     val ttsNoticeEnabled: Boolean = false,
     val autoCleanupEnabled: Boolean = false,
 )
@@ -43,10 +45,16 @@ class SettingsViewModel @Inject constructor(
 
     val state: StateFlow<SettingsUiState> = combine(
         settingsRepo.sttLanguageLock,
+        settingsRepo.sttSpokenLanguages,
         settingsRepo.ttsNoticeEnabled,
         settingsRepo.autoCleanupEnabled,
-    ) { lock, tts, cleanup ->
-        SettingsUiState(languageLock = lock, ttsNoticeEnabled = tts, autoCleanupEnabled = cleanup)
+    ) { lock, spoken, tts, cleanup ->
+        SettingsUiState(
+            languageLock = lock,
+            spokenLanguages = spoken,
+            ttsNoticeEnabled = tts,
+            autoCleanupEnabled = cleanup,
+        )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SettingsUiState())
 
     private val _downloadNeeded = MutableSharedFlow<Unit>()
@@ -59,6 +67,14 @@ class SettingsViewModel @Inject constructor(
             // resolves against the just-saved setting; checked off the main thread).
             val ready = withContext(dispatcher) { modelPaths.modelsReady() }
             if (!ready) _downloadNeeded.emit(Unit)
+        }
+    }
+
+    fun onSpokenLanguageToggled(code: String, selected: Boolean) {
+        viewModelScope.launch {
+            val current = settingsRepo.sttSpokenLanguages.first()
+            val next = if (selected) current + code else current - code
+            settingsRepo.setSttSpokenLanguages(next)
         }
     }
 

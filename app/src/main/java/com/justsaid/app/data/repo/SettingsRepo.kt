@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.justsaid.app.stt.WhisperLanguageCatalog
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
@@ -41,6 +42,11 @@ class SettingsRepo @Inject constructor(
         }
     }
 
+    /** ISO 639-1 codes the user speaks on calls; empty = any language (full auto). */
+    val sttSpokenLanguages: Flow<Set<String>> = data.map { prefs ->
+        parseSpokenLanguages(prefs[STT_SPOKEN_LANGUAGES])
+    }
+
     suspend fun setLegalAccepted(value: Boolean) =
         edit(LEGAL_ACCEPTED, value)
 
@@ -57,6 +63,16 @@ class SettingsRepo @Inject constructor(
         dataStore.edit { it[STT_LANGUAGE_LOCK] = value.name }
     }
 
+    suspend fun setSttSpokenLanguages(codes: Set<String>) {
+        val normalized = codes
+            .map { it.trim().lowercase() }
+            .filter { it in WhisperLanguageCatalog.supportedCodes }
+            .toSortedSet()
+        dataStore.edit {
+            it[STT_SPOKEN_LANGUAGES] = if (normalized.isEmpty()) "" else normalized.joinToString(",")
+        }
+    }
+
     private suspend fun edit(key: Preferences.Key<Boolean>, value: Boolean) {
         dataStore.edit { it[key] = value }
     }
@@ -67,5 +83,14 @@ class SettingsRepo @Inject constructor(
         val AUTO_CLEANUP_ENABLED = booleanPreferencesKey("auto_cleanup_enabled")
         val ALWAYS_LISTEN = booleanPreferencesKey("always_listen")
         val STT_LANGUAGE_LOCK = stringPreferencesKey("stt_language_lock")
+        val STT_SPOKEN_LANGUAGES = stringPreferencesKey("stt_spoken_languages")
+
+        fun parseSpokenLanguages(raw: String?): Set<String> {
+            if (raw.isNullOrBlank()) return emptySet()
+            return raw.split(',')
+                .map { it.trim().lowercase() }
+                .filter { it.isNotEmpty() }
+                .toSet()
+        }
     }
 }

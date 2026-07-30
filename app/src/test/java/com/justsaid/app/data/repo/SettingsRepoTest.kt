@@ -54,11 +54,13 @@ class SettingsRepoTest {
         repo.setAutoCleanupEnabled(true)
         repo.setAlwaysListen(true)
         repo.setSttLanguageLock(SttLanguageLock.EN)
+        repo.setSttSpokenLanguages(setOf("hi", "en"))
 
         assertThat(repo.legalAccepted.first()).isTrue()
         assertThat(repo.ttsNoticeEnabled.first()).isTrue()
         assertThat(repo.autoCleanupEnabled.first()).isTrue()
         assertThat(repo.alwaysListen.first()).isTrue()
         assertThat(repo.sttLanguageLock.first()).isEqualTo(SttLanguageLock.EN)
+        assertThat(repo.sttSpokenLanguages.first()).containsExactly("en", "hi")
     }
 }

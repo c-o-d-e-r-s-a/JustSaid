@@ -33,6 +33,7 @@ import com.justsaid.app.R
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.PromiseItem
 import com.justsaid.app.export.SmsIntentBuilder
+import com.justsaid.app.summary.SummaryEnglishTranslator
 import com.justsaid.app.summary.SummaryMarkdown
 
 /** Post-call summary route: the promises found in the call + Save / Send actions. */
@@ -45,6 +46,7 @@ fun SummaryScreen(
     SummaryContent(
         state = state,
         onSave = viewModel::onSave,
+        onReadModeSelected = viewModel::onReadModeSelected,
         onDone = onDone,
     )
 }
@@ -54,6 +56,7 @@ fun SummaryScreen(
 fun SummaryContent(
     state: SummaryUiState,
     onSave: () -> Unit,
+    onReadModeSelected: (SummaryReadMode) -> Unit,
     onDone: () -> Unit,
 ) {
     val summary = state.summary ?: return
@@ -71,7 +74,17 @@ fun SummaryContent(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                SummaryBody(summary)
+                SummaryReadModeRow(
+                    mode = state.readMode,
+                    englishLoading = state.englishLoading,
+                    englishFailed = state.englishFailed,
+                    onSelected = onReadModeSelected,
+                )
+                SummaryBody(
+                    summary = summary,
+                    readMode = state.readMode,
+                    englishView = state.englishView,
+                )
             }
 
             SaveButton(saved = state.saved, onSave = onSave)
@@ -93,7 +106,11 @@ fun SummaryContent(
 
 /** Header (who + when) and the promise list. Reused by the read-only history detail. */
 @Composable
-fun SummaryBody(summary: CallSummary) {
+fun SummaryBody(
+    summary: CallSummary,
+    readMode: SummaryReadMode = SummaryReadMode.AsHeard,
+    englishView: SummaryEnglishTranslator.View? = null,
+) {
     Text(
         text = stringResource(
             R.string.summary_title_with,
@@ -112,17 +129,27 @@ fun SummaryBody(summary: CallSummary) {
             style = MaterialTheme.typography.bodyLarge,
         )
     } else {
-        summary.items.forEach { PromiseRow(it) }
+        summary.items.forEachIndexed { index, item ->
+            val title = when {
+                readMode == SummaryReadMode.English && englishView != null ->
+                    englishView.taskTitles.getOrNull(index) ?: item.task
+                else -> item.task
+            }
+            PromiseRow(item, displayTask = title)
+        }
     }
 
-    // Full STT text for debugging transcription; also helps when no tasks survived guardrails.
-    if (summary.fullTranscript.isNotBlank()) {
+    val heardText = when {
+        readMode == SummaryReadMode.English && englishView != null -> englishView.transcript
+        else -> summary.fullTranscript
+    }
+    if (heardText.isNotBlank()) {
         Text(
             text = stringResource(R.string.summary_heard_title),
             style = MaterialTheme.typography.titleLarge,
         )
         Text(
-            text = summary.fullTranscript,
+            text = heardText,
             style = MaterialTheme.typography.bodyLarge,
         )
     } else if (summary.items.isEmpty()) {
@@ -134,7 +161,76 @@ fun SummaryBody(summary: CallSummary) {
 }
 
 @Composable
-private fun PromiseRow(item: PromiseItem) {
+private fun SummaryReadModeRow(
+    mode: SummaryReadMode,
+    englishLoading: Boolean,
+    englishFailed: Boolean,
+    onSelected: (SummaryReadMode) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            ReadModeChip(
+                label = stringResource(R.string.summary_read_as_heard),
+                contentDesc = stringResource(R.string.summary_read_as_heard_content_desc),
+                selected = mode == SummaryReadMode.AsHeard,
+                onClick = { onSelected(SummaryReadMode.AsHeard) },
+                modifier = Modifier.weight(1f),
+            )
+            ReadModeChip(
+                label = stringResource(R.string.summary_read_english),
+                contentDesc = stringResource(R.string.summary_read_english_content_desc),
+                selected = mode == SummaryReadMode.English,
+                onClick = { onSelected(SummaryReadMode.English) },
+                modifier = Modifier.weight(1f),
+            )
+        }
+        if (englishLoading) {
+            Text(
+                text = stringResource(R.string.summary_english_loading),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+        }
+        if (englishFailed) {
+            Text(
+                text = stringResource(R.string.summary_english_failed),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ReadModeChip(
+    label: String,
+    contentDesc: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            modifier = modifier
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = contentDesc },
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier
+                .heightIn(min = 48.dp)
+                .semantics { contentDescription = contentDesc },
+        ) {
+            Text(label, style = MaterialTheme.typography.labelLarge)
+        }
+    }
+}
+
+@Composable
+private fun PromiseRow(item: PromiseItem, displayTask: String) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -148,7 +244,7 @@ private fun PromiseRow(item: PromiseItem) {
         }
         Row {
             Text(
-                text = item.task + (item.quantity?.let { "  " + stringResource(R.string.summary_quantity, it) } ?: ""),
+                text = displayTask + (item.quantity?.let { "  " + stringResource(R.string.summary_quantity, it) } ?: ""),
                 style = MaterialTheme.typography.titleLarge,
             )
         }

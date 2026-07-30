@@ -47,7 +47,7 @@ class WhisperEngineFakeTest {
 
         /** Returns JSON for the Nth transcribe call; default is one unique segment. */
         var responseFor: (callIndex: Int) -> String = { i ->
-            """{"segments":[{"t0":1200,"t1":1900,"text":"seg$i"}]}"""
+            """{"lang":"auto","segments":[{"t0":1200,"t1":1900,"text":"seg$i"}]}"""
         }
 
         override fun init(modelPath: String, threads: Int): Long {
@@ -55,7 +55,13 @@ class WhisperEngineFakeTest {
             return if (failInit) 0L else 42L
         }
 
-        override fun transcribe(handle: Long, pcm: FloatArray, lang: String, translate: Boolean): String {
+        override fun transcribe(
+            handle: Long,
+            pcm: FloatArray,
+            lang: String,
+            translate: Boolean,
+            allowedLanguagesCsv: String,
+        ): String {
             check(handle == 42L) { "transcribe with wrong handle" }
             check(freeCalls == 0) { "transcribe after free (N1 violation)" }
             windows += pcm
@@ -115,7 +121,7 @@ class WhisperEngineFakeTest {
         writeMonoWav(speech(seconds = 3))
         // Both windows re-hear a segment in their first second plus one unique segment.
         bridge.responseFor = { i ->
-            """{"segments":[{"t0":100,"t1":600,"text":"overlap echo"},{"t0":1300,"t1":1800,"text":"unique $i"}]}"""
+            """{"lang":"auto","segments":[{"t0":100,"t1":600,"text":"overlap echo"},{"t0":1300,"t1":1800,"text":"unique $i"}]}"""
         }
 
         val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
@@ -129,7 +135,7 @@ class WhisperEngineFakeTest {
     @Test
     fun `identical consecutive lines are deduped`() = runTest {
         writeMonoWav(speech(seconds = 3))
-        bridge.responseFor = { """{"segments":[{"t0":1300,"t1":1800,"text":"  Same LINE  "}]}""" }
+        bridge.responseFor = { """{"lang":"auto","segments":[{"t0":1300,"t1":1800,"text":"  Same LINE  "}]}""" }
 
         val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
 
@@ -191,6 +197,31 @@ class WhisperEngineFakeTest {
 
         assertThat(result.value.segments).isEmpty()
         assertThat(bridge.windows).isEmpty()
+    }
+
+    @Test
+    fun `auto mode pins whisper language after first detected window`() = runTest {
+        writeMonoWav(speech(seconds = 5))
+        bridge.responseFor = { i ->
+            val lang = if (i == 0) "hi" else "auto"
+            """{"lang":"$lang","segments":[{"t0":1200,"t1":1900,"text":"seg$i"}]}"""
+        }
+
+        engine().transcribe(call(), "auto")
+
+        assertThat(bridge.languages).containsExactly("auto", "hi", "hi", "hi")
+    }
+
+    @Test
+    fun `detected language is attached to transcript`() = runTest {
+        writeMonoWav(speech(seconds = 2))
+        bridge.responseFor = {
+            """{"lang":"hi","segments":[{"t0":1200,"t1":1900,"text":"नमस्ते"}]}"""
+        }
+
+        val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
+
+        assertThat(result.value.detectedLanguage).isEqualTo("hi")
     }
 
     // ── failure paths ──

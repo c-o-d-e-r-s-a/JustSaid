@@ -55,6 +55,7 @@ class AccessibilityTest {
                 SummaryContent(
                     state = SummaryUiState(summary = summary, saved = false),
                     onSave = {},
+                    onReadModeSelected = {},
                     onDone = {},
                 )
             }
@@ -100,6 +101,7 @@ class AccessibilityTest {
                 SettingsContent(
                     state = SettingsUiState(),
                     onLanguageSelected = {},
+                    onSpokenLanguageToggled = { _, _ -> },
                     onTtsNoticeChanged = {},
                     onAutoCleanupChanged = {},
                     onClearHistory = {},

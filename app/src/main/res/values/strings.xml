@@ -69,6 +69,12 @@
     <string name="summary_no_items">No tasks or promises were found in this call.</string>
     <string name="summary_heard_title">What we heard</string>
     <string name="summary_heard_nothing">We did not catch any words from this call. Try speaking a little louder next time, and keep Listen turned on while you talk.</string>
+    <string name="summary_read_as_heard">As heard</string>
+    <string name="summary_read_english">English</string>
+    <string name="summary_read_as_heard_content_desc">Show tasks and transcript as heard on the call</string>
+    <string name="summary_read_english_content_desc">Show an English translation of tasks and transcript</string>
+    <string name="summary_english_loading">Preparing English…</string>
+    <string name="summary_english_failed">English could not be prepared. Try again or use As heard.</string>
     <string name="summary_save_button">\uD83D\uDCBE Save to History</string>
     <string name="summary_save_content_desc">Save this summary to your history</string>
     <string name="summary_saved_button">\u2713 Saved to History</string>
@@ -111,6 +117,11 @@
     <string name="settings_language_en">English only</string>
     <string name="settings_language_auto_content_desc">Listen for any language</string>
     <string name="settings_language_en_content_desc">Listen for English only</string>
+    <string name="settings_spoken_languages_title">Languages I use on calls</string>
+    <string name="settings_spoken_languages_desc">Tap every language you actually speak on calls (include all you mix, e.g. Gujarati and Hindi). JustSaid listens only within your picks. Leave all off to allow any language.</string>
+    <string name="settings_spoken_language_chip_content_desc">%1$s, %2$s</string>
+    <string name="settings_spoken_language_selected">selected</string>
+    <string name="settings_spoken_language_not_selected">not selected</string>
     <string name="settings_tts_title">Spoken notice</string>
     <string name="settings_tts_desc">Say \u201cthis call is being recorded\u201d out loud when listening starts.</string>
     <string name="settings_tts_content_desc">Turn the spoken recording notice on or off</string>

@@ -6,6 +6,7 @@ import com.justsaid.app.core.Transcript
 import com.justsaid.app.data.repo.SettingsRepo
 import com.justsaid.app.data.repo.SttLanguageLock
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.combine
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -24,10 +25,21 @@ class SttPipeline @Inject constructor(
 
     /** Transcribes [call] using the whisper model matching the language setting. */
     suspend fun transcribe(call: RecordedCall): JustSaidResult<Transcript> {
-        val language = when (settingsRepo.sttLanguageLock.first()) {
-            SttLanguageLock.EN -> "en"
-            SttLanguageLock.AUTO -> "auto"
+        val (lock, spoken) = combine(
+            settingsRepo.sttLanguageLock,
+            settingsRepo.sttSpokenLanguages,
+        ) { l, s -> l to s }.first()
+        val (whisperLang, allowedCsv) = SttTranscribeHint.resolve(lock, spoken)
+        return when (val result = whisperEngine.transcribe(call, whisperLang, allowedCsv)) {
+            is JustSaidResult.Success -> {
+                val detected = when {
+                    lock == SttLanguageLock.EN -> "en"
+                    spoken.size == 1 -> spoken.single()
+                    else -> result.value.detectedLanguage
+                }
+                JustSaidResult.Success(result.value.copy(detectedLanguage = detected))
+            }
+            is JustSaidResult.Failure -> result
         }
-        return whisperEngine.transcribe(call, language)
     }
 }

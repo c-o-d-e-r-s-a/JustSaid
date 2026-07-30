@@ -5,18 +5,27 @@ import androidx.lifecycle.viewModelScope
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.data.repo.SummaryRepo
+import com.justsaid.app.llm.LlmEngine
+import com.justsaid.app.summary.SummaryEnglishTranslator
 import com.justsaid.app.summary.SummaryEvents
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+enum class SummaryReadMode { AsHeard, English }
 
 /** Immutable state for the post-call summary screen. */
 data class SummaryUiState(
     val summary: CallSummary? = null,
     val saved: Boolean = false,
+    val readMode: SummaryReadMode = SummaryReadMode.AsHeard,
+    val englishView: SummaryEnglishTranslator.View? = null,
+    val englishLoading: Boolean = false,
+    val englishFailed: Boolean = false,
 )
 
 /**
@@ -30,6 +39,7 @@ data class SummaryUiState(
 class SummaryViewModel @Inject constructor(
     private val summaryEvents: SummaryEvents,
     private val repo: SummaryRepo,
+    private val llmEngine: LlmEngine,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SummaryUiState())
@@ -38,10 +48,45 @@ class SummaryViewModel @Inject constructor(
     init {
         viewModelScope.launch {
             summaryEvents.latest.collect { summary ->
-                _state.value = SummaryUiState(
-                    summary = summary ?: _state.value.summary,
-                    saved = if (summary != null) summary.id != 0L else _state.value.saved,
-                )
+                _state.update { current ->
+                    SummaryUiState(
+                        summary = summary ?: current.summary,
+                        saved = if (summary != null) summary.id != 0L else current.saved,
+                        readMode = SummaryReadMode.AsHeard,
+                        englishView = null,
+                        englishLoading = false,
+                        englishFailed = false,
+                    )
+                }
+            }
+        }
+    }
+
+    fun onReadModeSelected(mode: SummaryReadMode) {
+        _state.update { it.copy(readMode = mode, englishFailed = false) }
+        if (mode == SummaryReadMode.English) {
+            maybeLoadEnglish()
+        }
+    }
+
+    private fun maybeLoadEnglish() {
+        val summary = _state.value.summary ?: return
+        if (_state.value.englishView != null || _state.value.englishLoading) return
+        _state.update { it.copy(englishLoading = true, englishFailed = false) }
+        viewModelScope.launch {
+            when (val result = llmEngine.generate(SummaryEnglishTranslator.buildLlmPrompt(summary))) {
+                is JustSaidResult.Success -> {
+                    val view = SummaryEnglishTranslator.parse(result.value, summary)
+                    _state.update {
+                        it.copy(
+                            englishLoading = false,
+                            englishView = view,
+                            englishFailed = view == null,
+                        )
+                    }
+                }
+                is JustSaidResult.Failure ->
+                    _state.update { it.copy(englishLoading = false, englishFailed = true) }
             }
         }
     }
@@ -52,7 +97,7 @@ class SummaryViewModel @Inject constructor(
         viewModelScope.launch {
             when (val result = repo.save(current)) {
                 is JustSaidResult.Success ->
-                    _state.value = SummaryUiState(summary = result.value, saved = true)
+                    _state.value = _state.value.copy(summary = result.value, saved = true)
                 is JustSaidResult.Failure -> Unit // button stays available for a retry (U4)
             }
         }

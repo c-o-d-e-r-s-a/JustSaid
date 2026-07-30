@@ -8,6 +8,13 @@ import org.junit.Test
 
 class CommitmentFallbackTest {
 
+    @Test
+    fun `fallback skipped when transcript language is not English`() {
+        val t = transcript("मैं कल दूध खरीदूंगा")
+        assertThat(CommitmentFallback.appliesTo(t.copy(detectedLanguage = "hi"))).isFalse()
+        assertThat(CommitmentFallback.propose(t.copy(detectedLanguage = "hi"))).isEmpty()
+    }
+
     private fun transcript(vararg lines: String) = Transcript(
         lines.mapIndexed { i, text ->
             TranscriptSegment(Speaker.UNKNOWN, text, i * 1000L, i * 1000L + 500L)

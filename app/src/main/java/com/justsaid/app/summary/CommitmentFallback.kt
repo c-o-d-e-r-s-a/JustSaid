@@ -14,6 +14,12 @@ import com.justsaid.app.core.Transcript
  */
 object CommitmentFallback {
 
+    /** English-only patterns; skip for other languages so we do not invent English tasks. */
+    fun appliesTo(transcript: Transcript): Boolean {
+        val lang = transcript.detectedLanguage
+        return lang == null || lang.equals("en", ignoreCase = true)
+    }
+
     private val COMMITMENT = Regex(
         """\b((?:I will|I'll|I am going to|I'm going to)\s+.+?)(?=\s+and\s+(?:I will|I'll|I am going to|I'm going to)\b|[.!?]|\s*$|$)""",
         RegexOption.IGNORE_CASE,

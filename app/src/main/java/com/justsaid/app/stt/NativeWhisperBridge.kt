@@ -18,7 +18,13 @@ interface NativeWhisperBridge {
      * [handle]. Returns a JSON string `{"segments":[{"t0":ms,"t1":ms,"text":".."}]}`,
      * or an empty string on error.
      */
-    fun transcribe(handle: Long, pcm: FloatArray, lang: String, translate: Boolean): String
+    fun transcribe(
+        handle: Long,
+        pcm: FloatArray,
+        lang: String,
+        translate: Boolean,
+        allowedLanguagesCsv: String,
+    ): String
 
     /** Frees the native context. Zero-safe and idempotent (Constitution N3). */
     fun free(handle: Long)

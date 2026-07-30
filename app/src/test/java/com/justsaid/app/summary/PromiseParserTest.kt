@@ -83,4 +83,15 @@ class PromiseParserTest {
         assertThat(items).hasSize(1)
         assertThat(items.first().task).isEqualTo("Water the plants")
     }
+
+    @Test
+    fun `non-english task text parses`() {
+        val items = PromiseParser.parse(
+            """दूध खरीदना (Proof: "मैं दो लीटर दूध खरीदूंगा")""",
+        )
+
+        assertThat(items).hasSize(1)
+        assertThat(items.first().task).isEqualTo("दूध खरीदना")
+        assertThat(items.first().proofQuote).isEqualTo("मैं दो लीटर दूध खरीदूंगा")
+    }
 }

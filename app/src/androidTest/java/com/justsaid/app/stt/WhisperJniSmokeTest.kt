@@ -80,7 +80,7 @@ class WhisperJniSmokeTest {
             val handle = e.nativeInit(model!!.absolutePath, WhisperParams.threadCount())
             assertThat(handle).isNotEqualTo(0L)
             val pcm = AudioDecoder().decode(wav).mono
-            val json = e.nativeTranscribe(handle, pcm, "en", false)
+            val json = e.nativeTranscribe(handle, pcm, "en", false, "")
             assertThat(json).contains("\"segments\"")
             assertThat(json.length).isGreaterThan("{\"segments\":[]}".length)
             e.nativeFree(handle)

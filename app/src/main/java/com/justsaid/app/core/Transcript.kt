@@ -18,7 +18,14 @@ data class TranscriptSegment(
  * The full call transcript produced by Phase 3 (STT) and consumed by Phase 4 (LLM).
  * Segments are ordered by [TranscriptSegment.startMs].
  */
-data class Transcript(val segments: List<TranscriptSegment>) {
+data class Transcript(
+    val segments: List<TranscriptSegment>,
+    /**
+     * ISO 639-1 language Whisper detected for the call (e.g. `hi`, `es`).
+     * Null when unknown or the user locked English-only STT.
+     */
+    val detectedLanguage: String? = null,
+) {
 
     /**
      * Plain-text rendering fed to the LLM and used for the verbatim-proof substring

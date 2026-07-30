@@ -34,9 +34,23 @@ object Prompts {
            start the line with "Unconfirmed: ".
         6. Be neutral and concise. No preamble, no closing remarks, no headers,
            no explanations, no creative filler.
-        7. If the call contains nothing actionable, output the single word: NONE
+        7. Write each task description in the same language and spelling as the transcript.
+           Do not add English words (for example "Buy", "Fix", "Call") unless those exact
+           English words appear in the transcript. If the transcript uses romanized Hindi,
+           Urdu, or Gujarati, the task line must stay in that same form — never switch to
+           standard English headings.
+        8. Never translate the transcript or the proof quotes. Keep the structural
+           keywords exactly as shown (Task line format, Proof:, Unconfirmed:, NONE).
+        9. If the call contains nothing actionable, output the single word: NONE
 
-        Example — transcript:
+        Example — romanized Hindi transcript:
+        SPEAKER_?: 5 litre dood leke aana aur 2 chappal leke aana.
+
+        Example — correct output:
+        Unconfirmed: 5 litre dood leke aana [5 litre] (Proof: "5 litre dood leke aana")
+        Unconfirmed: 2 chappal leke aana (Proof: "2 chappal leke aana")
+
+        Example — English transcript:
         SPEAKER_?: I will buy 2 liters of milk and I will fix the sink this weekend.
 
         Example — correct output:
@@ -50,9 +64,17 @@ object Prompts {
      * `<|begin_of_text|>` is intentionally absent because tokenization already adds
      * BOS (`add_special=true`).
      */
-    fun forTranscript(transcriptText: String): String = buildString {
+    fun forTranscript(transcriptText: String, detectedLanguage: String? = null): String = buildString {
         append("<|start_header_id|>system<|end_header_id|>\n\n")
         append(SYSTEM_PROMPT)
+        detectedLanguage?.let { code ->
+            append("\n\nThe transcript language is ISO 639-1 \"")
+            append(code)
+            append(
+                "\". Task descriptions must match that language and the transcript's " +
+                    "spelling/script (including romanized text). Do not default to English.",
+            )
+        }
         append("<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n")
         append("Transcript:\n")
         append(transcriptText)

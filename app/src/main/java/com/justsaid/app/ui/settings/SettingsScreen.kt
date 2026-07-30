@@ -2,6 +2,9 @@ package com.justsaid.app.ui.settings
 
 import android.content.Intent
 import android.provider.Settings
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -37,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.justsaid.app.R
 import com.justsaid.app.data.repo.SttLanguageLock
+import com.justsaid.app.stt.WhisperLanguageCatalog
 
 /**
  * Plain rows with big toggles (U1/U2): call language, spoken notice, auto-cleanup,
@@ -57,6 +61,7 @@ fun SettingsScreen(
     SettingsContent(
         state = state,
         onLanguageSelected = viewModel::onLanguageSelected,
+        onSpokenLanguageToggled = viewModel::onSpokenLanguageToggled,
         onTtsNoticeChanged = viewModel::onTtsNoticeChanged,
         onAutoCleanupChanged = viewModel::onAutoCleanupChanged,
         onClearHistory = viewModel::onClearHistory,
@@ -69,6 +74,7 @@ fun SettingsScreen(
 fun SettingsContent(
     state: SettingsUiState,
     onLanguageSelected: (SttLanguageLock) -> Unit,
+    onSpokenLanguageToggled: (code: String, selected: Boolean) -> Unit,
     onTtsNoticeChanged: (Boolean) -> Unit,
     onAutoCleanupChanged: (Boolean) -> Unit,
     onClearHistory: () -> Unit,
@@ -90,6 +96,13 @@ fun SettingsContent(
             )
 
             LanguageRow(selected = state.languageLock, onSelected = onLanguageSelected)
+
+            if (state.languageLock == SttLanguageLock.AUTO) {
+                SpokenLanguagesRow(
+                    selected = state.spokenLanguages,
+                    onToggled = onSpokenLanguageToggled,
+                )
+            }
 
             ToggleRow(
                 title = stringResource(R.string.settings_tts_title),
@@ -225,6 +238,52 @@ private fun LanguageRow(
                 onClick = { onSelected(SttLanguageLock.EN) },
                 modifier = Modifier.weight(1f),
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SpokenLanguagesRow(
+    selected: Set<String>,
+    onToggled: (code: String, selected: Boolean) -> Unit,
+) {
+    val entriesWithLabels = WhisperLanguageCatalog.entries.map { entry ->
+        entry to WhisperLanguageCatalog.displayName(entry.code)
+    }
+    val sortedEntries = entriesWithLabels.sortedBy { it.second }.map { it.first }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = stringResource(R.string.settings_spoken_languages_title),
+            style = MaterialTheme.typography.titleLarge,
+        )
+        Text(
+            text = stringResource(R.string.settings_spoken_languages_desc),
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            for (entry in sortedEntries) {
+                val label = WhisperLanguageCatalog.displayName(entry.code)
+                val isSelected = entry.code in selected
+                val stateLabel = stringResource(
+                    if (isSelected) R.string.settings_spoken_language_selected
+                    else R.string.settings_spoken_language_not_selected,
+                )
+                val chipDesc = stringResource(
+                    R.string.settings_spoken_language_chip_content_desc,
+                    label,
+                    stateLabel,
+                )
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { onToggled(entry.code, !isSelected) },
+                    label = { Text(label, style = MaterialTheme.typography.labelLarge) },
+                    modifier = Modifier.semantics { contentDescription = chipDesc },
+                )
+            }
         }
     }
 }

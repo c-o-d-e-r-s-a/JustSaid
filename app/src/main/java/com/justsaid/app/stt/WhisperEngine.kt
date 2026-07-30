@@ -47,7 +47,13 @@ class WhisperEngine(
 
     // ── JNI surface (do not rename: symbols are mangled against this class) ──
     external fun nativeInit(modelPath: String, threads: Int): Long
-    external fun nativeTranscribe(handle: Long, pcm: FloatArray, lang: String, translate: Boolean): String
+    external fun nativeTranscribe(
+        handle: Long,
+        pcm: FloatArray,
+        lang: String,
+        translate: Boolean,
+        allowedLanguagesCsv: String,
+    ): String
     external fun nativeFree(handle: Long)
 
     private inner class RealBridge : NativeWhisperBridge {
@@ -56,18 +62,26 @@ class WhisperEngine(
             return nativeInit(modelPath, threads)
         }
 
-        override fun transcribe(handle: Long, pcm: FloatArray, lang: String, translate: Boolean): String =
-            nativeTranscribe(handle, pcm, lang, translate)
+        override fun transcribe(
+            handle: Long,
+            pcm: FloatArray,
+            lang: String,
+            translate: Boolean,
+            allowedLanguagesCsv: String,
+        ): String = nativeTranscribe(handle, pcm, lang, translate, allowedLanguagesCsv)
 
         override fun free(handle: Long) = nativeFree(handle)
     }
 
     /**
-     * Full-call transcription. [language] is whisper's language hint: `"auto"` for the
-     * multilingual model, `"en"` when the EN lock picked the english model (Phase 1
-     * `ModelPaths` already resolved the matching model file).
+     * Full-call transcription. [whisperLanguage] is whisper's language hint (`auto`, `en`,
+     * or a pinned ISO code). [allowedLanguagesCsv] restricts auto-detect when non-empty.
      */
-    suspend fun transcribe(call: RecordedCall, language: String): JustSaidResult<Transcript> =
+    suspend fun transcribe(
+        call: RecordedCall,
+        whisperLanguage: String,
+        allowedLanguagesCsv: String = "",
+    ): JustSaidResult<Transcript> =
         withContext(dispatcher) {
             val modelFile = modelPaths.sttModelFile()
             if (!modelFile.exists()) {
@@ -86,14 +100,22 @@ class WhisperEngine(
             }
 
             try {
+                val pin = LanguagePin(requested = whisperLanguage)
                 val segments = if (call.tier == CaptureTier.STEREO && audio.isStereo) {
                     // S1: L = local user, R = remote party; same context sequentially (N1).
-                    transcribeChannel(handle, audio.left!!, Speaker.LOCAL, language) +
-                        transcribeChannel(handle, audio.right!!, Speaker.REMOTE, language)
+                    transcribeChannel(handle, audio.left!!, Speaker.LOCAL, pin, allowedLanguagesCsv) +
+                        transcribeChannel(handle, audio.right!!, Speaker.REMOTE, pin, allowedLanguagesCsv)
                 } else {
-                    transcribeChannel(handle, audio.mono, Speaker.UNKNOWN, language)
+                    transcribeChannel(handle, audio.mono, Speaker.UNKNOWN, pin, allowedLanguagesCsv)
                 }
-                JustSaidResult.Success(Transcript(segments.sortedBy { it.startMs }))
+                val detectedLanguage = when {
+                    whisperLanguage == "en" -> "en"
+                    whisperLanguage != "auto" -> whisperLanguage
+                    else -> pin.detectedLanguage
+                }
+                JustSaidResult.Success(
+                    Transcript(segments.sortedBy { it.startMs }, detectedLanguage = detectedLanguage),
+                )
             } catch (e: Exception) {
                 JustSaidResult.Failure("transcription failed", e)
             } finally {
@@ -105,12 +127,32 @@ class WhisperEngine(
      * Sliding-window pass over one channel. Windows advance by chunk−overlap; silent
      * windows are skipped by the VAD; segments in a window's leading overlap zone are
      * dropped because the previous window already emitted them.
+     *
+     * After the first successful auto-detect window, pins whisper's language hint so
+     * later chunks stay in the same script (whisper recommendation for multilingual).
      */
+    private class LanguagePin(val requested: String) {
+        var detectedLanguage: String? = null
+            private set
+
+        fun hintForWindow(): String = when {
+            requested != "auto" -> requested
+            detectedLanguage != null -> detectedLanguage!!
+            else -> "auto"
+        }
+
+        fun absorb(chunk: WhisperJson.TranscriptionChunk) {
+            if (requested != "auto") return
+            chunk.detectedLanguage?.let { detectedLanguage = it }
+        }
+    }
+
     private fun transcribeChannel(
         handle: Long,
         pcm: FloatArray,
         speaker: Speaker,
-        language: String,
+        language: LanguagePin,
+        allowedLanguagesCsv: String,
     ): List<TranscriptSegment> {
         val out = mutableListOf<TranscriptSegment>()
         val overlapMs = params.overlapSamples * 1000L / params.sampleRate
@@ -122,10 +164,18 @@ class WhisperEngine(
             val end = min(start + params.chunkSamples, pcm.size)
             if (vadGate.hasSpeech(pcm, start, end - start)) {
                 val window = padToMinWindow(pcm.copyOfRange(start, end))
-                val json = bridge.transcribe(handle, window, language, params.translate)
+                val json = bridge.transcribe(
+                    handle,
+                    window,
+                    language.hintForWindow(),
+                    params.translate,
+                    allowedLanguagesCsv,
+                )
                 val windowStartMs = start * 1000L / params.sampleRate
+                val chunk = WhisperJson.parseChunk(json)
+                language.absorb(chunk)
 
-                for (seg in WhisperJson.parseSegments(json)) {
+                for (seg in chunk.segments) {
                     val text = seg.text.trim()
                     if (text.isEmpty()) continue
                     // Overlap dedupe: segment midpoint inside the re-heard first second.

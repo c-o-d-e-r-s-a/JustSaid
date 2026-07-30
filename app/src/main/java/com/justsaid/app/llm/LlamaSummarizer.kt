@@ -35,7 +35,11 @@ class LlamaSummarizer(
             return JustSaidResult.Failure("transcript is empty")
         }
 
-        val output = when (val result = engine.generate(Prompts.forTranscript(transcriptText))) {
+        val output = when (
+            val result = engine.generate(
+                Prompts.forTranscript(transcriptText, transcript.detectedLanguage),
+            )
+        ) {
             is JustSaidResult.Success -> result.value
             is JustSaidResult.Failure -> return result
         }
@@ -45,7 +49,7 @@ class LlamaSummarizer(
         // even when the transcript clearly contains "I will …" commitments. Fall
         // back to a quote-preserving extractor; HallucinationGuard still drops
         // anything that is not a literal substring (Constitution G1).
-        if (items.isEmpty()) {
+        if (items.isEmpty() && CommitmentFallback.appliesTo(transcript)) {
             items = HallucinationGuard.validate(CommitmentFallback.propose(transcript), transcript)
         }
 

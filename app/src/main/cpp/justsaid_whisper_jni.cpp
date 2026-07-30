@@ -17,6 +17,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "whisper.h"
 
@@ -77,6 +78,62 @@ void append_json_escaped(std::string &out, const char *text) {
     }
 }
 
+// Comma-separated ISO 639-1 codes (e.g. "en,hi") → whisper language ids.
+std::vector<int> parse_allowed_lang_ids(const char *csv) {
+    std::vector<int> ids;
+    if (csv == nullptr || csv[0] == '\0') return ids;
+    const char *start = csv;
+    while (*start != '\0') {
+        const char *end = start;
+        while (*end != '\0' && *end != ',') ++end;
+        if (end > start) {
+            char token[8] = {};
+            const size_t len = static_cast<size_t>(end - start);
+            if (len < sizeof(token)) {
+                memcpy(token, start, len);
+                const int id = whisper_lang_id(token);
+                if (id >= 0) ids.push_back(id);
+            }
+        }
+        start = (*end == ',') ? end + 1 : end;
+    }
+    return ids;
+}
+
+bool pick_constrained_language(
+        whisper_context *ctx,
+        const float *samples,
+        int n_samples,
+        int n_threads,
+        const std::vector<int> &allowed_ids,
+        char *out_lang,
+        size_t out_len) {
+    if (allowed_ids.empty() || out_lang == nullptr || out_len == 0) return false;
+    if (whisper_pcm_to_mel(ctx, samples, n_samples, n_threads) != 0) {
+        JS_LOGE("pick_constrained_language: pcm_to_mel failed");
+        return false;
+    }
+    std::vector<float> probs(static_cast<size_t>(whisper_lang_max_id() + 1), 0.0f);
+    if (whisper_lang_auto_detect(ctx, 0, n_threads, probs.data()) < 0) {
+        JS_LOGE("pick_constrained_language: auto_detect failed");
+        return false;
+    }
+    int pick = allowed_ids.front();
+    float best = -1.0f;
+    for (const int id : allowed_ids) {
+        if (id < 0 || id > whisper_lang_max_id()) continue;
+        if (probs[static_cast<size_t>(id)] > best) {
+            best = probs[static_cast<size_t>(id)];
+            pick = id;
+        }
+    }
+    const char *code = whisper_lang_str(pick);
+    if (code == nullptr || code[0] == '\0') return false;
+    strncpy(out_lang, code, out_len - 1);
+    out_lang[out_len - 1] = '\0';
+    return true;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -133,7 +190,7 @@ Java_com_justsaid_app_stt_WhisperEngine_nativeInit(
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_justsaid_app_stt_WhisperEngine_nativeTranscribe(
         JNIEnv *env, jobject /*thiz*/, jlong handle, jfloatArray pcm,
-        jstring lang, jboolean translate) {
+        jstring lang, jboolean translate, jstring allowed_languages_csv) {
     if (handle == 0 || pcm == nullptr) return env->NewStringUTF("");
     {
         std::lock_guard<std::mutex> lock(g_handles_mutex);
@@ -158,27 +215,57 @@ Java_com_justsaid_app_stt_WhisperEngine_nativeTranscribe(
         strncpy(js->lang, "auto", sizeof(js->lang));
     }
     js->params.translate = (translate == JNI_TRUE);
+    js->params.language = js->lang;
+
+    const char *allowed_csv = nullptr;
+    if (allowed_languages_csv != nullptr) {
+        allowed_csv = env->GetStringUTFChars(allowed_languages_csv, nullptr);
+    }
 
     const jsize n_samples = env->GetArrayLength(pcm);
-    if (n_samples <= 0) return env->NewStringUTF("");
+    if (n_samples <= 0) {
+        if (allowed_csv != nullptr) env->ReleaseStringUTFChars(allowed_languages_csv, allowed_csv);
+        return env->NewStringUTF("");
+    }
 
     jfloat *samples = env->GetFloatArrayElements(pcm, nullptr);
-    if (samples == nullptr) return env->NewStringUTF("");
+    if (samples == nullptr) {
+        if (allowed_csv != nullptr) env->ReleaseStringUTFChars(allowed_languages_csv, allowed_csv);
+        return env->NewStringUTF("");
+    }
+
+    const std::vector<int> allowed_ids = parse_allowed_lang_ids(allowed_csv);
+    const bool want_constrained = strcmp(js->lang, "auto") == 0 && !allowed_ids.empty();
+    if (want_constrained) {
+        if (pick_constrained_language(
+                js->ctx, samples, static_cast<int>(n_samples), js->params.n_threads,
+                allowed_ids, js->lang, sizeof(js->lang))) {
+            js->params.language = js->lang;
+        }
+    }
 
     const int rc = whisper_full(js->ctx, js->params, samples, static_cast<int>(n_samples));
 
     // Input only — JNI_ABORT skips the copy-back. Single release point covers
     // every path below (AGENTS.md §3.5).
     env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
+    if (allowed_csv != nullptr) {
+        env->ReleaseStringUTFChars(allowed_languages_csv, allowed_csv);
+    }
 
     if (rc != 0) {
         JS_LOGE("nativeTranscribe: whisper_full failed rc=%d", rc);
         return env->NewStringUTF("");
     }
 
+    const int lang_id = whisper_full_lang_id(js->ctx);
+    const char *lang_code = whisper_lang_str(lang_id);
+
     std::string &json = js->json;
     json.clear();
-    json += "{\"segments\":[";
+    json += "{\"lang\":\"";
+    append_json_escaped(json, (lang_code != nullptr && lang_code[0] != '\0') ? lang_code : "auto");
+    json += "\",\"segments\":[";
     const int n_segments = whisper_full_n_segments(js->ctx);
     for (int i = 0; i < n_segments; ++i) {
         // whisper timestamps are in centiseconds; the app speaks milliseconds.
