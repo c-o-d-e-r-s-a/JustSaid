@@ -1,99 +1,154 @@
 package com.justsaid.app.stt
 
+import java.io.BufferedInputStream
 import java.io.DataInputStream
 import java.io.File
+import java.io.FileInputStream
 import java.io.IOException
+import java.io.RandomAccessFile
 import javax.inject.Inject
 
 /**
- * Decoded PCM ready for whisper: normalized floats in [-1, 1] at 16 kHz.
- * [left] and [right] are non-null only for stereo input (Tier 1 capture),
- * where L = local user and R = remote party (Constitution S1).
+ * Header metadata for a PCM WAV file produced by JustSaid capture or test fixtures.
  */
-data class DecodedAudio(
-    val mono: FloatArray,
-    val left: FloatArray?,
-    val right: FloatArray?,
+data class WavInfo(
+    val channels: Int,
     val sampleRate: Int,
+    val bitsPerSample: Int,
+    val dataOffset: Long,
+    val frameCount: Int,
 ) {
-    val isStereo: Boolean get() = left != null && right != null
+    val durationMs: Long get() = if (sampleRate <= 0) 0L else frameCount * 1000L / sampleRate
 }
 
 /**
  * Minimal RIFF/WAVE reader for the app's own recordings (16-bit PCM mono/stereo,
- * written by Phase 2's WavWriter) plus test fixtures. Converts to float, splits
- * stereo channels, and linearly resamples anything not already at 16 kHz.
+ * written by Phase 2's WavWriter) plus test fixtures. Reads bounded windows only —
+ * never loads an entire recording into a [ByteArray] or full-session [FloatArray].
  */
 class AudioDecoder @Inject constructor() {
 
     /**
-     * Reads [file] fully into normalized float PCM at [WhisperParams.SAMPLE_RATE_HZ].
-     * Throws [IOException] on malformed input — callers (the engine) convert this
-     * into a JustSaidResult.Failure at the layer boundary.
+     * Parses the WAV header and locates the PCM data chunk without reading audio bytes.
      */
-    fun decode(file: File): DecodedAudio {
-        val (header, data) = readWav(file)
+    fun probe(file: File): WavInfo {
+        val (header, dataOffset, dataSize) = readWavHeader(file)
+        val bytesPerFrame = header.channels * (header.bitsPerSample / 8)
+        val frameCount = if (bytesPerFrame == 0) 0 else dataSize / bytesPerFrame
+        return WavInfo(
+            channels = header.channels,
+            sampleRate = header.sampleRate,
+            bitsPerSample = header.bitsPerSample,
+            dataOffset = dataOffset,
+            frameCount = frameCount,
+        )
+    }
 
+    /**
+     * Decodes [frameCount] source frames starting at [startFrame] into mono float PCM
+     * at [WhisperParams.SAMPLE_RATE_HZ]. Stereo input is downmixed (L+R)/2 with no
+     * channel attribution (Constitution S1).
+     */
+    fun decodeMonoWindow(
+        file: File,
+        info: WavInfo,
+        startFrame: Int,
+        frameCount: Int,
+    ): FloatArray {
+        if (frameCount <= 0) return FloatArray(0)
+        val bytesPerFrame = info.channels * (info.bitsPerSample / 8)
+        val startByte = info.dataOffset + startFrame.toLong() * bytesPerFrame
+        val bytesToRead = frameCount * bytesPerFrame
+        val data = ByteArray(bytesToRead)
+        RandomAccessFile(file, "r").use { raf ->
+            raf.seek(startByte)
+            raf.readFully(data)
+        }
+
+        val mono = when (info.channels) {
+            1 -> pcm16ToMono(data)
+            2 -> {
+                val frames = data.size / bytesPerFrame
+                val out = FloatArray(frames)
+                for (f in 0 until frames) {
+                    val loL = data[f * 4].toInt() and 0xFF
+                    val hiL = data[f * 4 + 1].toInt()
+                    val loR = data[f * 4 + 2].toInt() and 0xFF
+                    val hiR = data[f * 4 + 3].toInt()
+                    val left = ((hiL shl 8) or loL) / 32768f
+                    val right = ((hiR shl 8) or loR) / 32768f
+                    out[f] = (left + right) / 2f
+                }
+                out
+            }
+            else -> throw IOException("unsupported channel count ${info.channels}")
+        }
+        return resampleTo16k(mono, info.sampleRate)
+    }
+
+    private fun pcm16ToMono(data: ByteArray): FloatArray {
         val samples = FloatArray(data.size / 2)
         for (i in samples.indices) {
             val lo = data[i * 2].toInt() and 0xFF
             val hi = data[i * 2 + 1].toInt()
             samples[i] = ((hi shl 8) or lo) / 32768f
         }
-
-        return if (header.channels == 2) {
-            val frames = samples.size / 2
-            val left = FloatArray(frames)
-            val right = FloatArray(frames)
-            for (f in 0 until frames) {
-                left[f] = samples[f * 2]
-                right[f] = samples[f * 2 + 1]
-            }
-            val l16 = resampleTo16k(left, header.sampleRate)
-            val r16 = resampleTo16k(right, header.sampleRate)
-            val mono = FloatArray(l16.size) { (l16[it] + r16[it]) / 2f }
-            DecodedAudio(mono, l16, r16, WhisperParams.SAMPLE_RATE_HZ)
-        } else {
-            DecodedAudio(resampleTo16k(samples, header.sampleRate), null, null, WhisperParams.SAMPLE_RATE_HZ)
-        }
+        return samples
     }
 
     private data class WavHeader(val channels: Int, val sampleRate: Int, val bitsPerSample: Int)
 
-    private fun readWav(file: File): Pair<WavHeader, ByteArray> {
-        DataInputStream(file.inputStream().buffered()).use { input ->
-            if (readTag(input) != "RIFF") throw IOException("not a RIFF file: ${file.name}")
-            input.skipFully(4) // riff size
-            if (readTag(input) != "WAVE") throw IOException("not a WAVE file: ${file.name}")
+    private fun readWavHeader(file: File): Triple<WavHeader, Long, Int> {
+        DataInputStream(BufferedInputStream(FileInputStream(file))).use { input ->
+            var offset = 0L
+            if (readTag(input).also { offset += 4 } != "RIFF") {
+                throw IOException("not a RIFF file: ${file.name}")
+            }
+            input.skipFully(4)
+            offset += 4
+            if (readTag(input).also { offset += 4 } != "WAVE") {
+                throw IOException("not a WAVE file: ${file.name}")
+            }
 
             var header: WavHeader? = null
-            // Chunk-walk: fixtures from other tools may carry LIST/INFO chunks.
+            var dataOffset = 0L
+            var dataSize = 0
             while (true) {
                 val tag = readTagOrNull(input) ?: break
+                offset += 4
                 val size = readLe32(input)
+                offset += 4
                 when (tag) {
                     "fmt " -> {
                         val format = readLe16(input)
                         val channels = readLe16(input)
                         val sampleRate = readLe32(input)
-                        input.skipFully(6) // byteRate + blockAlign
+                        input.skipFully(6)
                         val bits = readLe16(input)
                         input.skipFully(size - 16)
+                        offset += size
                         if (format != 1) throw IOException("unsupported WAV format $format (PCM only)")
                         if (bits != 16) throw IOException("unsupported bit depth $bits (16-bit only)")
                         if (channels !in 1..2) throw IOException("unsupported channel count $channels")
                         header = WavHeader(channels, sampleRate, bits)
                     }
                     "data" -> {
-                        val h = header ?: throw IOException("data chunk before fmt chunk")
-                        val data = ByteArray(size)
-                        input.readFully(data)
-                        return h to data
+                        header ?: throw IOException("data chunk before fmt chunk")
+                        dataOffset = offset
+                        dataSize = size
+                        input.skipFully(size)
+                        offset += size
                     }
-                    else -> input.skipFully(size + (size and 1)) // chunks are word-aligned
+                    else -> {
+                        val padded = size + (size and 1)
+                        input.skipFully(padded)
+                        offset += padded
+                    }
                 }
             }
-            throw IOException("no data chunk in ${file.name}")
+            val h = header ?: throw IOException("no fmt chunk in ${file.name}")
+            if (dataSize == 0) throw IOException("no data chunk in ${file.name}")
+            return Triple(h, dataOffset, dataSize)
         }
     }
 

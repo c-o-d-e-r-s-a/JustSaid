@@ -1,7 +1,8 @@
 package com.justsaid.app.stt
 
-import com.justsaid.app.audio.CaptureTier
+import com.justsaid.app.audio.CaptureInput
 import com.justsaid.app.audio.RecordedCall
+import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.ModelPaths
@@ -15,9 +16,9 @@ import javax.inject.Singleton
 import kotlin.math.min
 
 /**
- * Kotlin orchestrator for whisper.cpp: decodes the wav, gates silence (N5), chunks
- * into ~30 s windows with ~1 s overlap, runs every window through ONE native context
- * (N1), dedupes overlap text, and tags speakers (S1/S2).
+ * Kotlin orchestrator for whisper.cpp: probes the wav, decodes bounded ~30 s mono
+ * windows, gates silence (N5), runs every window through ONE native context (N1),
+ * dedupes overlap text, and tags every segment [Speaker.UNKNOWN] (S1).
  *
  * The three `external fun`s here are the only JNI entry points; their mangled
  * symbols live in `cpp/justsaid_whisper_jni.cpp` (AGENTS.md §3). All orchestration
@@ -74,11 +75,11 @@ class WhisperEngine(
     }
 
     /**
-     * Full-call transcription. [whisperLanguage] is whisper's language hint (`auto`, `en`,
+     * Full-session transcription. [whisperLanguage] is whisper's language hint (`auto`, `en`,
      * or a pinned ISO code). [allowedLanguagesCsv] restricts auto-detect when non-empty.
      */
     suspend fun transcribe(
-        call: RecordedCall,
+        session: RecordedSession,
         whisperLanguage: String,
         allowedLanguagesCsv: String = "",
     ): JustSaidResult<Transcript> =
@@ -88,10 +89,18 @@ class WhisperEngine(
                 return@withContext JustSaidResult.Failure("STT model missing: ${modelFile.name}")
             }
 
-            val audio = try {
-                audioDecoder.decode(call.wavFile)
+            val info = try {
+                audioDecoder.probe(session.wavFile)
             } catch (e: Exception) {
-                return@withContext JustSaidResult.Failure("could not decode call audio", e)
+                return@withContext JustSaidResult.Failure("could not decode session audio", e)
+            }
+
+            val durationMs = when {
+                session.durationMs > 0L -> session.durationMs
+                else -> info.durationMs
+            }
+            if (durationMs > WhisperParams.MAX_SESSION_DURATION_MS) {
+                return@withContext JustSaidResult.Failure(SESSION_TOO_LONG_MESSAGE)
             }
 
             val handle = bridge.init(modelFile.absolutePath, WhisperParams.threadCount())
@@ -101,13 +110,13 @@ class WhisperEngine(
 
             try {
                 val pin = LanguagePin(requested = whisperLanguage)
-                val segments = if (call.tier == CaptureTier.STEREO && audio.isStereo) {
-                    // S1: L = local user, R = remote party; same context sequentially (N1).
-                    transcribeChannel(handle, audio.left!!, Speaker.LOCAL, pin, allowedLanguagesCsv) +
-                        transcribeChannel(handle, audio.right!!, Speaker.REMOTE, pin, allowedLanguagesCsv)
-                } else {
-                    transcribeChannel(handle, audio.mono, Speaker.UNKNOWN, pin, allowedLanguagesCsv)
-                }
+                val segments = transcribeSession(
+                    handle = handle,
+                    file = session.wavFile,
+                    info = info,
+                    language = pin,
+                    allowedLanguagesCsv = allowedLanguagesCsv,
+                )
                 val detectedLanguage = when {
                     whisperLanguage == "en" -> "en"
                     whisperLanguage != "auto" -> whisperLanguage
@@ -124,10 +133,26 @@ class WhisperEngine(
         }
 
     /**
-     * Sliding-window pass over one channel. Windows advance by chunk−overlap; silent
-     * windows are skipped by the VAD; segments in a window's leading overlap zone are
-     * dropped because the previous window already emitted them.
-     *
+     * Temporary bridge for [RecordedCall] consumers until task 4 migrates the pipeline.
+     */
+    suspend fun transcribe(
+        call: RecordedCall,
+        whisperLanguage: String,
+        allowedLanguagesCsv: String = "",
+    ): JustSaidResult<Transcript> = transcribe(call.toSession(), whisperLanguage, allowedLanguagesCsv)
+
+    private fun RecordedCall.toSession() = RecordedSession(
+        id = phoneNumber,
+        wavFile = wavFile,
+        input = CaptureInput.MICROPHONE_MONO,
+        sampleRate = sampleRate,
+        channels = channels,
+        startedAt = 0L,
+        durationMs = durationMs,
+        sessionLabel = contactName,
+    )
+
+    /**
      * After the first successful auto-detect window, pins whisper's language hint so
      * later chunks stay in the same script (whisper recommendation for multilingual).
      */
@@ -147,48 +172,75 @@ class WhisperEngine(
         }
     }
 
-    private fun transcribeChannel(
+    private fun transcribeSession(
         handle: Long,
-        pcm: FloatArray,
-        speaker: Speaker,
+        file: java.io.File,
+        info: WavInfo,
         language: LanguagePin,
         allowedLanguagesCsv: String,
     ): List<TranscriptSegment> {
+        val totalSamples16k = samplesAt16k(info)
         val out = mutableListOf<TranscriptSegment>()
         val overlapMs = params.overlapSamples * 1000L / params.sampleRate
-        var start = 0
-        while (start < pcm.size) {
-            // A tail shorter than the overlap was fully covered by the previous window.
-            if (start > 0 && pcm.size - start <= params.overlapSamples) break
+        var startSample16k = 0
 
-            val end = min(start + params.chunkSamples, pcm.size)
-            if (vadGate.hasSpeech(pcm, start, end - start)) {
-                val window = padToMinWindow(pcm.copyOfRange(start, end))
+        while (startSample16k < totalSamples16k) {
+            if (startSample16k > 0 && totalSamples16k - startSample16k <= params.overlapSamples) break
+
+            val endSample16k = min(startSample16k + params.chunkSamples, totalSamples16k)
+            val sourceStartFrame = sourceFrameFor16kSample(info, startSample16k)
+            val sourceEndFrame = sourceFrameFor16kSample(info, endSample16k)
+            val window = audioDecoder.decodeMonoWindow(
+                file,
+                info,
+                sourceStartFrame,
+                sourceEndFrame - sourceStartFrame,
+            )
+
+            if (vadGate.hasSpeech(window)) {
+                val padded = padToMinWindow(window)
                 val json = bridge.transcribe(
                     handle,
-                    window,
+                    padded,
                     language.hintForWindow(),
                     params.translate,
                     allowedLanguagesCsv,
                 )
-                val windowStartMs = start * 1000L / params.sampleRate
+                val windowStartMs = startSample16k * 1000L / params.sampleRate
                 val chunk = WhisperJson.parseChunk(json)
                 language.absorb(chunk)
 
                 for (seg in chunk.segments) {
                     val text = seg.text.trim()
                     if (text.isEmpty()) continue
-                    // Overlap dedupe: segment midpoint inside the re-heard first second.
-                    if (start > 0 && (seg.t0Ms + seg.t1Ms) / 2 < overlapMs) continue
-                    // Guard against whisper re-emitting the identical previous line.
+                    if (startSample16k > 0 && (seg.t0Ms + seg.t1Ms) / 2 < overlapMs) continue
                     if (out.isNotEmpty() && normalize(out.last().text) == normalize(text)) continue
-                    out += TranscriptSegment(speaker, text, windowStartMs + seg.t0Ms, windowStartMs + seg.t1Ms)
+                    out += TranscriptSegment(
+                        Speaker.UNKNOWN,
+                        text,
+                        windowStartMs + seg.t0Ms,
+                        windowStartMs + seg.t1Ms,
+                    )
                 }
             }
-            if (end == pcm.size) break
-            start += params.strideSamples
+            if (endSample16k == totalSamples16k) break
+            startSample16k += params.strideSamples
         }
         return out
+    }
+
+    private fun samplesAt16k(info: WavInfo): Int {
+        if (info.frameCount == 0) return 0
+        return if (info.sampleRate == params.sampleRate) {
+            info.frameCount
+        } else {
+            (info.frameCount.toLong() * params.sampleRate / info.sampleRate).toInt()
+        }
+    }
+
+    private fun sourceFrameFor16kSample(info: WavInfo, sample16k: Int): Int {
+        if (info.sampleRate == params.sampleRate) return sample16k.coerceAtMost(info.frameCount)
+        return (sample16k.toLong() * info.sampleRate / params.sampleRate).toInt().coerceAtMost(info.frameCount)
     }
 
     /** whisper_full rejects input under ~1 s; zero-pad trailing slivers up front. */
@@ -201,6 +253,8 @@ class WhisperEngine(
 
     private companion object {
         const val MIN_WINDOW_SECONDS = 1.2
+        const val SESSION_TOO_LONG_MESSAGE =
+            "This recording is too long to process right now. Please keep sessions under 15 minutes."
         val WHITESPACE = Regex("\\s+")
 
         @Volatile

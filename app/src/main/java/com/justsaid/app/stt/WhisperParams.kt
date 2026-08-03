@@ -25,6 +25,12 @@ data class WhisperParams(
         const val SAMPLE_RATE_HZ = 16_000
 
         /**
+         * Hard cap until Phase 4 chunked summarization lands. Sessions longer than
+         * this fail with a user-safe message instead of a silent partial transcript.
+         */
+        const val MAX_SESSION_DURATION_MS = 15 * 60 * 1000L
+
+        /**
          * Physical big-core estimate for the native thread pool (Constitution N4).
          * `availableProcessors` counts logical cores including LITTLE ones, so halve
          * it and clamp; 4 is the documented default when the topology is unknown.

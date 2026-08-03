@@ -3,8 +3,8 @@ package com.justsaid.app.stt
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.common.truth.Truth.assertThat
-import com.justsaid.app.audio.CaptureTier
-import com.justsaid.app.audio.RecordedCall
+import com.justsaid.app.audio.CaptureInput
+import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.ModelPaths
 import kotlinx.coroutines.Dispatchers
@@ -79,7 +79,8 @@ class WhisperJniSmokeTest {
             // Direct native lifecycle: init once, transcribe, free twice (N3).
             val handle = e.nativeInit(model!!.absolutePath, WhisperParams.threadCount())
             assertThat(handle).isNotEqualTo(0L)
-            val pcm = AudioDecoder().decode(wav).mono
+            val info = AudioDecoder().probe(wav)
+            val pcm = AudioDecoder().decodeMonoWindow(wav, info, 0, info.frameCount)
             val json = e.nativeTranscribe(handle, pcm, "en", false, "")
             assertThat(json).contains("\"segments\"")
             assertThat(json.length).isGreaterThan("{\"segments\":[]}".length)
@@ -89,16 +90,17 @@ class WhisperJniSmokeTest {
             // Full Kotlin path on the same fixture.
             val result = runBlocking {
                 e.transcribe(
-                    RecordedCall(
+                    RecordedSession(
+                        id = "smoke-test",
                         wavFile = wav,
-                        tier = CaptureTier.MIC_ONLY,
+                        input = CaptureInput.MICROPHONE_MONO,
                         sampleRate = 16_000,
                         channels = 1,
-                        phoneNumber = "+15555550123",
-                        contactName = null,
+                        startedAt = 0L,
                         durationMs = 11_000L,
+                        sessionLabel = null,
                     ),
-                    language = "en",
+                    whisperLanguage = "en",
                 )
             }
             val transcript = (result as JustSaidResult.Success).value

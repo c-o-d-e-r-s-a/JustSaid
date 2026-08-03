@@ -1,8 +1,8 @@
 package com.justsaid.app.stt
 
 import com.google.common.truth.Truth.assertThat
-import com.justsaid.app.audio.CaptureTier
-import com.justsaid.app.audio.RecordedCall
+import com.justsaid.app.audio.CaptureInput
+import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.audio.WavWriter
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.ModelPaths
@@ -19,8 +19,9 @@ import kotlin.math.sin
 
 /**
  * Kotlin-wrapper contract tests with a fake [NativeWhisperBridge] — no `.so`, no
- * device (TESTING.md C.1). Covers chunking, overlap dedupe, stereo speaker tagging,
- * VAD silence skip, and the single-init/single-free native lifecycle.
+ * device (TESTING.md C.1). Covers chunking, overlap dedupe, mono UNKNOWN tagging,
+ * VAD silence skip, bounded decode, max-duration guard, and the single-init/single-free
+ * native lifecycle.
  */
 @OptIn(ExperimentalCoroutinesApi::class)
 class WhisperEngineFakeTest {
@@ -77,7 +78,7 @@ class WhisperEngineFakeTest {
     @Before
     fun setUp() {
         modelFile = File.createTempFile("ggml-model", ".bin").apply { writeBytes(ByteArray(16)) }
-        wavFile = File.createTempFile("call", ".wav")
+        wavFile = File.createTempFile("session", ".wav")
         bridge = FakeBridge()
     }
 
@@ -93,22 +94,20 @@ class WhisperEngineFakeTest {
     fun `5s audio with 2s windows and 1s overlap produces 4 windows on one context`() = runTest {
         writeMonoWav(speech(seconds = 5))
 
-        val result = engine().transcribe(call(), "auto")
+        val result = engine().transcribe(session(), "auto")
 
         assertThat(result).isInstanceOf(JustSaidResult.Success::class.java)
         assertThat(bridge.windows).hasSize(4)
-        // Every window fits the fixed chunk size (N2: stable native buffers).
         bridge.windows.forEach { assertThat(it.size).isAtMost(params.chunkSamples) }
-        assertThat(bridge.initCalls).isEqualTo(1)   // N1: one context per call
-        assertThat(bridge.freeCalls).isEqualTo(1)   // N3: freed exactly once
+        assertThat(bridge.initCalls).isEqualTo(1)
+        assertThat(bridge.freeCalls).isEqualTo(1)
         assertThat(bridge.languages).containsExactly("auto", "auto", "auto", "auto")
     }
 
     @Test
     fun `segment times are offset by their window start`() = runTest {
         writeMonoWav(speech(seconds = 3))
-        // Windows start at 0s and 1s; each reports a segment at local 1200..1900ms.
-        val result = engine().transcribe(call(), "en") as JustSaidResult.Success
+        val result = engine().transcribe(session(), "en") as JustSaidResult.Success
 
         val starts = result.value.segments.map { it.startMs }
         assertThat(starts).containsExactly(1200L, 2200L).inOrder()
@@ -119,16 +118,13 @@ class WhisperEngineFakeTest {
     @Test
     fun `segments inside the re-heard overlap zone are dropped`() = runTest {
         writeMonoWav(speech(seconds = 3))
-        // Both windows re-hear a segment in their first second plus one unique segment.
         bridge.responseFor = { i ->
             """{"lang":"auto","segments":[{"t0":100,"t1":600,"text":"overlap echo"},{"t0":1300,"t1":1800,"text":"unique $i"}]}"""
         }
 
-        val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
+        val result = engine().transcribe(session(), "auto") as JustSaidResult.Success
         val texts = result.value.segments.map { it.text }
 
-        // Window 0 keeps its overlap-zone segment (nothing came before it);
-        // window 1's copy is the re-heard first second and is dropped.
         assertThat(texts).containsExactly("overlap echo", "unique 0", "unique 1").inOrder()
     }
 
@@ -137,39 +133,32 @@ class WhisperEngineFakeTest {
         writeMonoWav(speech(seconds = 3))
         bridge.responseFor = { """{"lang":"auto","segments":[{"t0":1300,"t1":1800,"text":"  Same LINE  "}]}""" }
 
-        val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
+        val result = engine().transcribe(session(), "auto") as JustSaidResult.Success
 
         assertThat(result.value.segments.map { it.text }).containsExactly("Same LINE")
     }
 
-    // ── stereo speaker tagging ──
+    // ── speaker tagging ──
 
     @Test
-    fun `stereo tier transcribes L and R separately tagging LOCAL and REMOTE`() = runTest {
-        writeStereoWav(seconds = 3)
+    fun `mono session tags every segment UNKNOWN`() = runTest {
+        writeMonoWav(speech(seconds = 3))
 
-        val result = engine().transcribe(call(tier = CaptureTier.STEREO, channels = 2), "auto")
+        val result = engine().transcribe(session(), "auto")
         val segments = (result as JustSaidResult.Success).value.segments
 
-        // 2 windows per channel; left (LOCAL) is transcribed before right (REMOTE).
-        assertThat(bridge.windows).hasSize(4)
-        assertThat(segments.map { it.speaker }.toSet())
-            .containsExactly(Speaker.LOCAL, Speaker.REMOTE)
-        assertThat(segments.first { it.text == "seg0" }.speaker).isEqualTo(Speaker.LOCAL)
-        assertThat(segments.first { it.text == "seg2" }.speaker).isEqualTo(Speaker.REMOTE)
-        // Merged output is ordered by startMs across channels.
-        assertThat(segments.map { it.startMs }).isInOrder()
-        assertThat(bridge.initCalls).isEqualTo(1)
-        assertThat(bridge.freeCalls).isEqualTo(1)
+        assertThat(segments).isNotEmpty()
+        assertThat(segments.map { it.speaker }.toSet()).containsExactly(Speaker.UNKNOWN)
     }
 
     @Test
-    fun `mono tier tags every segment UNKNOWN`() = runTest {
-        writeMonoWav(speech(seconds = 3))
+    fun `stereo fixture downmixes and tags every segment UNKNOWN`() = runTest {
+        writeStereoWav(seconds = 3)
 
-        val result = engine().transcribe(call(tier = CaptureTier.MIC_ONLY), "auto")
+        val result = engine().transcribe(session(channels = 2), "auto")
         val segments = (result as JustSaidResult.Success).value.segments
 
+        assertThat(bridge.windows).hasSize(2)
         assertThat(segments).isNotEmpty()
         assertThat(segments.map { it.speaker }.toSet()).containsExactly(Speaker.UNKNOWN)
     }
@@ -178,22 +167,21 @@ class WhisperEngineFakeTest {
 
     @Test
     fun `silent windows are skipped without a native call`() = runTest {
-        // 0..2s silence, 2..4s speech → the all-silent first window never hits JNI.
         val pcm = FloatArray(4 * sampleRate)
         speech(seconds = 2).copyInto(pcm, destinationOffset = 2 * sampleRate)
         writeMonoWav(pcm)
 
-        val result = engine().transcribe(call(), "auto")
+        val result = engine().transcribe(session(), "auto")
 
         assertThat(result).isInstanceOf(JustSaidResult.Success::class.java)
-        assertThat(bridge.windows).hasSize(2) // starts at 1s and 2s; 0s window gated out
+        assertThat(bridge.windows).hasSize(2)
     }
 
     @Test
-    fun `fully silent call yields an empty transcript not an error`() = runTest {
+    fun `fully silent session yields an empty transcript not an error`() = runTest {
         writeMonoWav(FloatArray(3 * sampleRate))
 
-        val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
+        val result = engine().transcribe(session(), "auto") as JustSaidResult.Success
 
         assertThat(result.value.segments).isEmpty()
         assertThat(bridge.windows).isEmpty()
@@ -207,7 +195,7 @@ class WhisperEngineFakeTest {
             """{"lang":"$lang","segments":[{"t0":1200,"t1":1900,"text":"seg$i"}]}"""
         }
 
-        engine().transcribe(call(), "auto")
+        engine().transcribe(session(), "auto")
 
         assertThat(bridge.languages).containsExactly("auto", "hi", "hi", "hi")
     }
@@ -219,9 +207,25 @@ class WhisperEngineFakeTest {
             """{"lang":"hi","segments":[{"t0":1200,"t1":1900,"text":"नमस्ते"}]}"""
         }
 
-        val result = engine().transcribe(call(), "auto") as JustSaidResult.Success
+        val result = engine().transcribe(session(), "auto") as JustSaidResult.Success
 
         assertThat(result.value.detectedLanguage).isEqualTo("hi")
+    }
+
+    // ── duration guard ──
+
+    @Test
+    fun `session longer than max duration fails without native init`() = runTest {
+        writeMonoWav(speech(seconds = 2))
+
+        val result = engine().transcribe(
+            session(durationMs = WhisperParams.MAX_SESSION_DURATION_MS + 1),
+            "auto",
+        )
+
+        assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
+        assertThat((result as JustSaidResult.Failure).reason).contains("too long")
+        assertThat(bridge.initCalls).isEqualTo(0)
     }
 
     // ── failure paths ──
@@ -231,7 +235,7 @@ class WhisperEngineFakeTest {
         writeMonoWav(speech(seconds = 2))
         modelFile.delete()
 
-        val result = engine().transcribe(call(), "auto")
+        val result = engine().transcribe(session(), "auto")
 
         assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
         assertThat(bridge.initCalls).isEqualTo(0)
@@ -242,17 +246,17 @@ class WhisperEngineFakeTest {
         writeMonoWav(speech(seconds = 2))
         bridge.failInit = true
 
-        val result = engine().transcribe(call(), "auto")
+        val result = engine().transcribe(session(), "auto")
 
         assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
-        assertThat(bridge.freeCalls).isEqualTo(0) // nothing to free for handle 0
+        assertThat(bridge.freeCalls).isEqualTo(0)
     }
 
     @Test
     fun `unreadable wav fails cleanly`() = runTest {
         wavFile.writeBytes(ByteArray(32) { 7 })
 
-        val result = engine().transcribe(call(), "auto")
+        val result = engine().transcribe(session(), "auto")
 
         assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
         assertThat((result as JustSaidResult.Failure).reason).contains("decode")
@@ -269,17 +273,17 @@ class WhisperEngineFakeTest {
         bridgeOverride = bridge,
     )
 
-    private fun call(tier: CaptureTier = CaptureTier.MIC_ONLY, channels: Int = 1) = RecordedCall(
+    private fun session(channels: Int = 1, durationMs: Long = 0L) = RecordedSession(
+        id = "session-test",
         wavFile = wavFile,
-        tier = tier,
+        input = CaptureInput.MICROPHONE_MONO,
         sampleRate = sampleRate,
         channels = channels,
-        phoneNumber = "+15555550123",
-        contactName = null,
-        durationMs = 0L,
+        startedAt = 0L,
+        durationMs = durationMs,
+        sessionLabel = null,
     )
 
-    /** A 440 Hz tone well above the VAD's RMS threshold. */
     private fun speech(seconds: Int): FloatArray =
         FloatArray(seconds * sampleRate) { 0.25f * sin(2.0 * PI * 440.0 * it / sampleRate).toFloat() }
 
@@ -290,7 +294,6 @@ class WhisperEngineFakeTest {
         }
     }
 
-    /** Interleaved stereo: tone on both channels so both pass the VAD. */
     private fun writeStereoWav(seconds: Int) {
         val frames = seconds * sampleRate
         val interleaved = ShortArray(frames * 2)
