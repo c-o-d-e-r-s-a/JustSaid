@@ -2,7 +2,9 @@ package com.justsaid.app.pipeline
 
 import com.google.common.truth.Truth.assertThat
 import com.justsaid.app.audio.CaptureTier
+import com.justsaid.app.audio.CaptureInput
 import com.justsaid.app.audio.RecordedCall
+import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.Speaker
@@ -81,11 +83,22 @@ class CallPipelineWavDeletionTest {
         fullTranscript = transcript.plainText(),
     )
 
+    private fun callToSession(call: RecordedCall) = RecordedSession(
+        id = call.phoneNumber,
+        wavFile = call.wavFile,
+        input = CaptureInput.MICROPHONE_MONO,
+        sampleRate = call.sampleRate,
+        channels = call.channels,
+        startedAt = 0L,
+        durationMs = call.durationMs,
+        sessionLabel = call.contactName,
+    )
+
     @Test
     fun `wav deleted on success and summary published with storage id`() = runTest {
         val call = recordedCall()
         coEvery { stt.transcribe(call) } returns JustSaidResult.Success(transcript)
-        coEvery { summarizer.summarize(call, transcript) } returns
+        coEvery { summarizer.summarize(callToSession(call), transcript) } returns
             JustSaidResult.Success(summaryFor(call))
 
         pipeline().process(call)
@@ -110,7 +123,7 @@ class CallPipelineWavDeletionTest {
     fun `wav deleted when summarizer returns Failure`() = runTest {
         val call = recordedCall()
         coEvery { stt.transcribe(call) } returns JustSaidResult.Success(transcript)
-        coEvery { summarizer.summarize(call, transcript) } returns JustSaidResult.Failure("llm broke")
+        coEvery { summarizer.summarize(callToSession(call), transcript) } returns JustSaidResult.Failure("llm broke")
 
         pipeline().process(call)
 
@@ -133,7 +146,7 @@ class CallPipelineWavDeletionTest {
     fun `wav deleted when summarizer throws`() = runTest {
         val call = recordedCall()
         coEvery { stt.transcribe(call) } returns JustSaidResult.Success(transcript)
-        coEvery { summarizer.summarize(call, transcript) } throws RuntimeException("boom")
+        coEvery { summarizer.summarize(callToSession(call), transcript) } throws RuntimeException("boom")
 
         runCatching { pipeline().process(call) }
 

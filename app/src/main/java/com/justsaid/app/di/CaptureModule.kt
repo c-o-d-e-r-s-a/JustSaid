@@ -8,7 +8,7 @@ import com.justsaid.app.audio.SessionPipeline
 import com.justsaid.app.audio.WavFileProvider
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.pipeline.CallPipelineImpl
-import com.justsaid.app.pipeline.SessionPipelineViaCallPipeline
+import com.justsaid.app.pipeline.SessionPipelineImpl
 import com.justsaid.app.session.CaptureServiceGateway
 import com.justsaid.app.session.MicrophoneCaptureServiceGateway
 import com.justsaid.app.session.StaleAudioCleaner
@@ -57,7 +57,7 @@ abstract class CaptureBindsModule {
 
   @Binds
   @Singleton
-  abstract fun bindSessionPipeline(impl: SessionPipelineViaCallPipeline): SessionPipeline
+  abstract fun bindSessionPipeline(impl: SessionPipelineImpl): SessionPipeline
 
   @Binds
   @Singleton

@@ -1,7 +1,9 @@
 package com.justsaid.app.pipeline
 
 import com.justsaid.app.audio.CallPipeline
+import com.justsaid.app.audio.CaptureInput
 import com.justsaid.app.audio.RecordedCall
+import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.data.repo.SummaryRepo
@@ -37,7 +39,9 @@ class CallPipelineImpl @Inject constructor(
                 is JustSaidResult.Success -> r.value
                 is JustSaidResult.Failure -> return@withContext // E2: wav still deleted below
             }
-            val summary = when (val r = summarizer.summarize(call, transcript)) {
+            val summary = when (
+                val r = summarizer.summarize(call.toSession(), transcript)
+            ) {
                 is JustSaidResult.Success -> r.value
                 is JustSaidResult.Failure -> return@withContext
             }
@@ -52,4 +56,15 @@ class CallPipelineImpl @Inject constructor(
             call.wavFile.delete()
         }
     }
+
+    private fun RecordedCall.toSession() = RecordedSession(
+        id = phoneNumber,
+        wavFile = wavFile,
+        input = CaptureInput.MICROPHONE_MONO,
+        sampleRate = sampleRate,
+        channels = channels,
+        startedAt = 0L,
+        durationMs = durationMs,
+        sessionLabel = contactName,
+    )
 }

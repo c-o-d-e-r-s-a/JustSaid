@@ -110,6 +110,21 @@ class HallucinationGuardTest {
     }
 
     @Test
+    fun `mic session forces unconfirmed unknown attribution`() {
+        val t = transcript(Speaker.LOCAL to "I'll mow the lawn this weekend")
+
+        val items = HallucinationGuard.validate(
+            listOf(parsed(quote = "I'll mow the lawn this weekend")),
+            t,
+            micSession = true,
+        )
+
+        assertThat(items).hasSize(1)
+        assertThat(items.first().attributedTo).isEqualTo(Speaker.UNKNOWN)
+        assertThat(items.first().confirmed).isFalse()
+    }
+
+    @Test
     fun `edge punctuation on the quote is tolerated`() {
         val t = transcript(Speaker.LOCAL to "I'll bring the ladder over on Saturday morning")
 

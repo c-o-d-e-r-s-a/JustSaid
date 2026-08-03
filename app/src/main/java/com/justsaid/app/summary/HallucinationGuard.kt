@@ -18,7 +18,15 @@ import com.justsaid.app.core.Transcript
  */
 object HallucinationGuard {
 
-    fun validate(parsed: List<ParsedPromise>, transcript: Transcript): List<PromiseItem> {
+    /**
+     * @param micSession When true (companion microphone capture), every surviving
+     * item is attributed to [Speaker.UNKNOWN] and marked unconfirmed.
+     */
+    fun validate(
+        parsed: List<ParsedPromise>,
+        transcript: Transcript,
+        micSession: Boolean = false,
+    ): List<PromiseItem> {
         val haystack = normalize(transcript.plainText())
         if (haystack.isEmpty()) return emptyList()
 
@@ -30,13 +38,13 @@ object HallucinationGuard {
             val needle = normalize(trimQuoteEdges(item.proofQuote))
             if (needle.isEmpty() || needle !in haystack) return@mapNotNull null
 
-            val speaker = attribute(needle, bySpeaker)
+            val speaker = if (micSession) Speaker.UNKNOWN else attribute(needle, bySpeaker)
             PromiseItem(
                 task = item.task,
                 quantity = item.quantity,
                 proofQuote = item.proofQuote,
                 attributedTo = speaker,
-                confirmed = !item.markedUnconfirmed && speaker != Speaker.UNKNOWN,
+                confirmed = !micSession && !item.markedUnconfirmed && speaker != Speaker.UNKNOWN,
             )
         }
     }
