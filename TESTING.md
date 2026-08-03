@@ -1,5 +1,11 @@
 # TESTING.md — JustSaid Verification Guide
 
+> **Companion pivot:** The default-dialer, `adb shell telecom`, stereo, and
+> in-call-overlay sections below describe the retired prototype. Do not use them
+> for new work. Backend agents must follow the manual microphone-session tests in
+> `docs/02-dialer-audio-capture.md` and the task order in
+> `docs/06-companion-backend-migration.md`.
+
 Three independent verification tracks. A phase is not "done" until its relevant
 track passes. All tracks are designed to run **without a live phone call** where
 possible (per the Testing Strategy: the audio source is dependency-injected).

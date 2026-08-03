@@ -9,7 +9,7 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 
 - **P1 [CRITICAL]** No network access except `data/download/ModelDownloader`
   (OkHttp → Hugging Face). No analytics, crash reporting, ads, GMS, Firebase.
-- **P2 [CRITICAL]** No content (audio, transcript, summary, phone number) is
+- **P2 [CRITICAL]** No content (audio, transcript, summary, session label) is
   ever logged in release builds. Debug logs gated behind `BuildConfig.DEBUG`
   and must never include full transcript text.
 - **P3** The app must pass an "airplane-mode" test: with wifi/data off (after
@@ -19,13 +19,14 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 
 - **A1 [CRITICAL]** The raw `.wav` buffer lives only in the app's private cache
   (`context.cacheDir`/private files). It is **deleted immediately** after the
-  LLM summary step completes — on **both success and failure** paths (use a
-  `try/finally` around the STT→LLM pipeline that deletes the file in `finally`).
+  summary pipeline completes — on **both success and failure** paths (use a
+  `try/finally` around the STT→LLM pipeline). A synchronous stale-buffer sweep
+  runs before a new session and on app startup; deletion failure is surfaced and
+  retried, never ignored.
 - **A2** No raw audio in Room, SharedPreferences, MediaStore, or backups.
   `android:allowBackup="false"`, and exclude cache via backup rules.
-- **A3** WAV format: 16 kHz, 16-bit PCM. Stereo (2ch) when the capture tier
-  provides L/R separation; mono otherwise. This matches whisper's expected input
-  after downmix/resample.
+- **A3** WAV format: mono, 16 kHz, 16-bit PCM. Input is `MIC` only. The app must
+  never claim to capture carrier-call output, remote audio, or separate speakers.
 
 ## Text Lifecycle
 
@@ -39,7 +40,7 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 ## Native Memory  {#native-memory}
 
 - **N1 [CRITICAL]** Model context is created once (`nativeInit`) and reused for
-  all chunks of a call. Never reload the model per chunk/segment.
+  all chunks of one capture session. Never reload the model per chunk/segment.
 - **N2** Per-chunk inference must not allocate the large working buffers; size
   them at init from max-chunk assumptions. This is the practical form of the
   "zero runtime allocation" requirement (zero *per-chunk* heap growth).
@@ -50,15 +51,14 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 - **N5** Implement VAD to skip silence; chunk long audio (~30s windows with a
   small overlap) to keep buffers stable and prevent hallucination loops.
 
-## Speaker Attribution (graceful degradation)
+## Speaker Attribution
 
-- **S1** If stereo capture succeeded, Left channel = **local user (You)**,
-  Right = **remote party (their name from Contacts)**. Transcribe channels
-  separately and tag each segment with the speaker.
-- **S2** If only mono is available, attribution is unknown. Pass the mono
-  transcript to the LLM with speakers marked `SPEAKER_?`. Any promise the LLM
-  cannot confidently attribute is labeled **"Unconfirmed"** speaker — never
-  guessed as a specific person.
+- **S1 [CRITICAL]** All capture-session audio is single-channel microphone
+  input. Every transcript segment is `UNKNOWN`; the model must never infer
+  "You", a remote party, or a contact from microphone audio.
+- **S2** Every extracted promise from a capture session is rendered
+  **Unconfirmed** unless a future, separately specified capture method provides
+  trustworthy attribution.
 
 ## Summarization Guardrails (enforced in CODE, not just the prompt)
 
@@ -76,7 +76,7 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 - **U2** WCAG AA: contrast ≥ 4.5:1, base font ≥ 18sp (scales with system),
   touch targets ≥ 48dp, full TalkBack content descriptions.
 - **U3** No modal traps except the unskippable first-run legal screen and the
-  post-call loading modal (which auto-dismisses to the summary).
+  processing state after a user ends a capture session.
 - **U4** No technical error codes shown to users; friendly messages + a retry.
 
 ## Error Handling & Results
@@ -84,7 +84,7 @@ document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
 - **E1** Layer boundaries return `core.JustSaidResult<T>` (sealed
   `Success`/`Failure(reason)`); do not throw across boundaries.
 - **E2** The pipeline is resilient: STT failure still deletes the wav and shows
-  a friendly "couldn't understand the call" screen.
+  a friendly "couldn't understand this recording" state.
 
 ## Shared Types (defined in Phase boundaries; do not redefine)
 
@@ -117,8 +117,7 @@ data class PromiseItem(
 )
 data class CallSummary(
     val id: Long,
-    val contactName: String?,    // from ContactResolver; null => raw number
-    val phoneNumber: String,
+    val sessionLabel: String?,   // optional user-entered label; never a queried call number
     val createdAt: Long,
     val items: List<PromiseItem>,
     val fullTranscript: String   // kept per T1; NOT audio

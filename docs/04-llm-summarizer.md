@@ -1,5 +1,11 @@
 # Phase 4 — llama.cpp Summarizer & "Proof of Promise" Pipeline
 
+> **Companion pivot override [CRITICAL]:** Follow
+> `docs/06-companion-backend-migration.md` task 4 where it differs from this
+> legacy phase. The pipeline consumes a manual `RecordedSession`, keeps all
+> microphone-derived items Unconfirmed, bounds long transcripts through
+> chunk-level extraction, and returns rather than auto-saves a summary.
+
 > Prerequisite reading: `AGENTS.md` (§3), `docs/00-CONSTITUTION.md`
 > (Summarization Guardrails G1–G4, Native Memory, Audio Lifecycle A1),
 > Phase 3 (`Transcript`, `SttPipeline`, `NativeWhisperBridge` pattern).

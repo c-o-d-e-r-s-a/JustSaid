@@ -1,104 +1,70 @@
 # JustSaid
 
-**Open-source, local-first Android call recorder + on-device AI summarizer.**
-Records your phone calls, transcribes them entirely on the device, and extracts
-the *promises and to-dos* — each backed by a verbatim quote — so you have proof
-of what was actually said. Built for non-technical users (grandparents included).
+**Open-source, local-first Android call companion + on-device AI summarizer.**
+JustSaid records an explicitly user-started microphone note around a phone call,
+transcribes it on the device, and extracts promises and to-dos backed by
+verbatim proof. It is built for non-technical users (grandparents included).
 
-> 🔒 **100% offline.** No cloud, no accounts, no analytics. Raw audio is deleted
-> the moment the summary is made. Only text summaries are kept, in an encrypted
-> local database.
-
----
+> 🔒 **100% offline.** No cloud, accounts, analytics, or telemetry. Temporary
+> raw audio is deleted after processing. Retained text is stored locally in an
+> encrypted database.
 
 ## What it does
 
-1. Acts as your phone's **default dialer** so it can access call audio.
-2. During a call, a big **`🔴 LISTEN FOR LISTS`** button buffers the audio.
-3. When the call ends, it runs **whisper.cpp** (speech-to-text) then a small
-   **llama.cpp** LLM (3B) — all on-device — to produce a summary like:
+1. You open JustSaid and explicitly start a **call note session** before or
+   during a normal phone call. JustSaid is not your phone app or default dialer.
+2. It records **microphone audio only** into a private temporary buffer. The
+   local speaker is captured best; speakerphone may make the other party audible,
+   but remote audio is never guaranteed or attributed.
+3. When you stop the note, it runs **whisper.cpp** then a small **llama.cpp**
+   model entirely on-device to extract concise, proof-backed tasks.
+4. You review, save, export, or share the text result. JustSaid sends nothing
+   itself.
 
-   ```
-   • Milk [2 liters]   (Proof: "grab two liters of milk on the way back")
-   • Fix the sink      (Proof: "yeah I'll fix the sink this weekend")
-   • Budget            (Unconfirmed — amount not clearly stated)
-   ```
-4. You tap **💾 Save** or **✉️ Send via SMS** (opens your normal messaging app).
+> **Important limitation:** JustSaid is not a two-sided carrier-call recorder.
+> Capture quality varies by device, headset, and speakerphone use. See
+> `docs/02-dialer-audio-capture.md` for the exact supported contract.
 
 ## Architecture at a glance
 
 | Concern | Choice | Why |
 |---|---|---|
-| Dialer / call audio | `InCallService` + `RoleManager` | Correct API for a default dialer handling *carrier* calls (androidx core-telecom is for self-managed VoIP, not this). |
-| Audio capture | Tiered: stereo `VOICE_CALL` → mono `VOICE_RECOGNITION` → mic | Stereo L/R speaker split isn't grantable to a sideloaded APK on Android 10+, so we degrade gracefully. See `docs/02`. |
-| STT | whisper.cpp (GGML, Q5_0) via JNI | Fast on-device, quantized, shared ggml runtime with the LLM. |
-| LLM | llama.cpp (Llama 3.2 3B, Q4_K_M) via JNI | One C++ toolchain for both engines; reliable structured output + NNAPI/Vulkan offload. |
+| Session control | Explicit user-started capture session | Clear consent; no default-dialer role or hidden capture. |
+| Audio capture | `MIC`, mono, 16 kHz PCM | Supported local microphone input; speakerphone may improve audibility. |
+| STT | whisper.cpp via JNI | Fast on-device transcription. |
+| LLM | llama.cpp via JNI | Offline task extraction with code-enforced proof checks. |
 | Storage | Room + SQLCipher | Encrypted text-only history. |
-| Models | Downloaded at first run from Hugging Face | Never bundled in the APK (see `.gitignore`). |
+| Models | First-run download from Hugging Face | Weights are never bundled in the APK. |
 
 ## Repository layout
 
-- **`AGENTS.md`** — the rulebook every contributor/agent must follow.
-- **`TESTING.md`** — CLI benchmarking, `adb` call mocking, and JUnit/Espresso.
-- **`docs/`** — the phase-by-phase build blueprint:
-  - `00-CONSTITUTION.md` — non-negotiable engineering standards.
-  - `01`…`05` — one self-contained spec per development phase.
+- **`AGENTS.md`** — contributor rulebook.
+- **`TESTING.md`** — local benchmarks and automated testing guidance.
+- **`docs/`** — architecture blueprint. Start with:
+  - `00-CONSTITUTION.md` — non-negotiable standards.
+  - `06-companion-backend-migration.md` — backend-only pivot plan and
+    agent-sized tasks.
 
 ## Build
 
-Requires Android SDK 35, NDK r26+, CMake 3.22+.
-
-### 1. Clone with native dependencies
-
-whisper.cpp and llama.cpp are vendored as **git submodules** under
-`app/src/main/cpp/` (their sources are compiled by our CMake into a single
-`libjustsaid_native.so`). The submodule *sources* are tracked; the build output
-and model weights are git-ignored.
-
-```bash
-# Fresh clone — pull the app plus both native submodules in one step:
-git clone --recurse-submodules <repo-url>
-
-# Already cloned without submodules? Initialize them:
-git submodule update --init --recursive
-```
-
-If you are setting the submodules up for the first time in this repo (maintainer
-step, run once — pin to a known-good tag, do not float on the default branch):
-
-```bash
-git submodule add https://github.com/ggml-org/whisper.cpp app/src/main/cpp/whisper.cpp
-git submodule add https://github.com/ggml-org/llama.cpp   app/src/main/cpp/llama.cpp
-
-# Pin each to a tested release tag (example tags — verify current before pinning):
-git -C app/src/main/cpp/whisper.cpp checkout v1.7.4
-git -C app/src/main/cpp/llama.cpp   checkout b4585
-
-git add .gitmodules app/src/main/cpp/whisper.cpp app/src/main/cpp/llama.cpp
-git commit -m "Vendor whisper.cpp and llama.cpp as pinned submodules"
-```
-
-To update a submodule later, `checkout` a newer tag inside it, re-run the CLI
-benchmarks in `TESTING.md` §A, then commit the new submodule pointer.
-
-### 2. Build the APK
+Requires Android SDK 35, NDK r26+, and CMake 3.22+.
 
 ```bash
 ./gradlew :app:assembleDebug
 ```
 
-First app launch downloads the STT + LLM model weights (~1–2 GB) into the app's
-private storage — the weights themselves are never committed (see `.gitignore`).
+The first launch downloads STT and LLM weights into app-private storage. The
+current repository vendors whisper.cpp and llama.cpp source under
+`app/src/main/cpp/`; before public releases, maintainers must record and test
+their exact upstream revisions.
 
-## Legal
+## Legal and safety
 
-Call recording consent laws vary by region. JustSaid shows an **unskippable
-disclaimer** on first launch and offers an optional spoken "this call is being
-recorded" notice. **You are responsible for complying with the laws where you
-and the other party are located.**
+Recording and consent laws vary by region. JustSaid requires a first-run
+disclosure and an explicit user action for every recording. You are responsible
+for complying with the laws where you and the other party are located.
 
 ## License
 
-JustSaid is released under the **MIT License** — see [`LICENSE`](LICENSE). The
-vendored native dependencies keep their own licenses: whisper.cpp and llama.cpp
-are both MIT (see their subdirectories under `app/src/main/cpp/`).
+JustSaid is released under the MIT License. Vendored native dependencies retain
+their own licenses.

@@ -4,10 +4,12 @@
 > violates a rule marked **[CRITICAL]** is a high-priority bug and will be
 > rejected. When in doubt, follow the "Constitution" in `docs/00-CONSTITUTION.md`.
 
-JustSaid is a **100% on-device, local-first** Android call recorder that
-transcribes calls (whisper.cpp), summarizes them into "promises/tasks with
-verbatim proof" (llama.cpp), and lets a non-technical user (think: aging
-parents) save or SMS the result. **Zero cloud. No analytics. No telemetry.**
+JustSaid is a **100% on-device, local-first** Android call companion. A user
+explicitly starts a microphone capture session around a normal phone call;
+JustSaid transcribes that microphone audio (whisper.cpp) and summarizes it into
+"promises/tasks with verbatim proof" (llama.cpp). It is not a default dialer,
+carrier-call recorder, or VoIP provider. **Zero cloud. No analytics. No
+telemetry.**
 
 ---
 
@@ -49,12 +51,12 @@ JustSaid/
 │     │  │  ├─ ui/
 │     │  │  │  ├─ theme/                 # high-contrast, large-text theme
 │     │  │  │  ├─ onboarding/            # Phase 1: legal + downloader screens
-│     │  │  │  ├─ incall/                # Phase 2: the [🔴 LISTEN] overlay
+│     │  │  │  ├─ capture/               # Phase 2: manual capture controls (future UI)
 │     │  │  │  ├─ summary/               # Phase 4/5: summary + Save/Send buttons
 │     │  │  │  ├─ history/               # Phase 5: saved summaries list
 │     │  │  │  └─ settings/              # Phase 5: language, TTS, cleanup, clear
-│     │  │  ├─ telecom/                  # Phase 2: JustSaidInCallService, CallManager
-│     │  │  ├─ audio/                    # Phase 2: capture engine (interface + impls)
+│     │  │  ├─ audio/                    # Phase 2: microphone capture engine
+│     │  │  ├─ session/                  # Phase 2: CaptureSession state machine
 │     │  │  ├─ stt/                      # Phase 3: WhisperEngine (Kotlin wrapper)
 │     │  │  ├─ llm/                      # Phase 4: LlmEngine (Kotlin wrapper) + prompts
 │     │  │  ├─ summary/                  # Phase 4: PromiseParser, guardrails
@@ -79,10 +81,11 @@ JustSaid/
 ├─ docs/                                # THE BLUEPRINT (read your phase file)
 │  ├─ 00-CONSTITUTION.md
 │  ├─ 01-onboarding-downloader.md
-│  ├─ 02-dialer-audio-capture.md
+│  ├─ 02-dialer-audio-capture.md          # manual companion capture phase
 │  ├─ 03-whisper-ndk.md
 │  ├─ 04-llm-summarizer.md
-│  └─ 05-intent-history.md
+│  ├─ 05-intent-history.md
+│  └─ 06-companion-backend-migration.md
 ├─ .gitignore
 ├─ AGENTS.md   (this file)
 ├─ TESTING.md
@@ -151,36 +154,41 @@ The native layer is the highest-risk area. Follow exactly.
 
 ---
 
-## 4. State Management (Call Lifecycle)
+## 4. State Management (Manual Capture Lifecycle)
 
-Call state is owned by `telecom/` (Phase 2) and flows one direction:
+Capture state is owned by `session/` and flows one direction:
 
 ```
-InCallService (system callbacks)
-   → CallStateHolder (StateFlow<CallState>)
-      → InCall UI (observe LISTEN toggle)
-      → AudioCaptureController (start/stop buffer on toggle+active)
-         → on DISCONNECTED & toggle was ON:
+Visible JustSaid activity (explicit user tap)
+   → CaptureSessionController (StateFlow<CaptureSessionState>)
+      → MicrophoneCaptureController (start/stop private mono buffer)
+         → on user stop:
               → SttEngine (Phase 3) → LlmEngine (Phase 4)
-                 → SummaryRepo.save (Phase 5) → delete .wav [CRITICAL]
+                 → user chooses retention → delete .wav [CRITICAL]
 ```
 
-- `CallState` is a sealed class: `Idle | Ringing | Active | Held | Disconnected`.
-- The pipeline (STT→LLM→delete wav) runs inside a **foreground service** started
-  on call-active and stopped after summary completion (Phase 2/4).
-- The `[🔴 LISTEN FOR LISTS]` toggle state is per-call, defaulting OFF unless the
-  user set "always listen" in settings (still OFF by default globally).
+- `CaptureSessionState` is a sealed class: `Idle | Recording | Finalizing |
+  Processing | Completed | Failed`.
+- The microphone foreground service may start **only from a visible activity
+  after an explicit capture tap** and stops as soon as capture ends.
+- There is no automatic start, default-dialer role, call-state listener, or
+  accessibility-service dependency. A user starts and stops every session.
+- Audio is mono and every transcript segment is `UNKNOWN`; never infer a remote
+  caller or promise two-sided capture.
 
 ---
 
 ## 5. Permissions Policy [CRITICAL]
 
-Request the **minimum** and only when needed:
-`READ_CALL_LOG`, `READ_PHONE_STATE`, `READ_CONTACTS`, `RECORD_AUDIO`,
-`MANAGE_OWN_CALLS`/dialer role, `FOREGROUND_SERVICE` + `_MICROPHONE`,
-`POST_NOTIFICATIONS`. **`INTERNET` is declared but must be used ONLY by the
-downloader.** No `WRITE_EXTERNAL_STORAGE`. No location, camera, or contacts
-write. Justify any new permission in the PR description.
+Request the **minimum** and only when needed: `RECORD_AUDIO`,
+`FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MICROPHONE`, and
+`POST_NOTIFICATIONS` where required. `READ_CONTACTS` is optional and may only
+be requested for a later, user-initiated recipient picker. Do not declare
+`READ_CALL_LOG`, `READ_PHONE_STATE`, `ANSWER_PHONE_CALLS`, `MANAGE_OWN_CALLS`,
+or dialer-role components. Do not add an `AccessibilityService`. **`INTERNET`
+is declared but must be used ONLY by the downloader.** No external storage,
+location, camera, or contacts write. Justify any new permission in the PR
+description.
 
 ---
 

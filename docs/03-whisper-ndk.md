@@ -1,5 +1,11 @@
 # Phase 3 — NDK whisper.cpp Integration (On-Device STT)
 
+> **Companion pivot override [CRITICAL]:** `docs/06-companion-backend-migration.md`
+> task 3 supersedes every legacy reference in this document to `RecordedCall`,
+> capture tiers, stereo channels, `LOCAL`/`REMOTE` speakers, or call lifecycle.
+> Phase 3 consumes `RecordedSession`, decodes bounded mono microphone windows,
+> and emits `Speaker.UNKNOWN` segments only.
+
 > Prerequisite reading: `AGENTS.md` (§3 JNI rules), `docs/00-CONSTITUTION.md`
 > (Native Memory, Speaker Attribution), Phase 2 (`RecordedCall`, `CallPipeline`).
 

@@ -1,204 +1,179 @@
-# Phase 2 — Default Dialer, Call Lifecycle & Audio Capture Engine
+# Phase 2 — Manual Capture Session & Microphone Backend
 
-> Prerequisite reading: `AGENTS.md`, `docs/00-CONSTITUTION.md`, Phase 1 outputs
-> (`core/`, `SettingsRepo`, theme, nav).
-
----
+> Prerequisite reading: `AGENTS.md`, `docs/00-CONSTITUTION.md`, and
+> `docs/06-companion-backend-migration.md`.
 
 ## Phase Goal
 
-Make JustSaid a usable **default dialer** that:
-1. Registers via `RoleManager` (`ROLE_DIALER`) and handles calls through
-   `InCallService` (incoming + outgoing).
-2. Shows an in-call UI with the big **`🔴 LISTEN FOR LISTS`** toggle and a
-   CallStyle system notification, running inside a compliant **foreground service**.
-3. Captures two-way call audio into a private `.wav` buffer using a **tiered
-   capture strategy** with graceful degradation, mapping speakers to channels
-   when possible.
-4. Resolves the remote number → contact name via the Contacts ContentProvider.
-5. On disconnect (if LISTEN was ON), hands the finished `.wav` + metadata to the
-   pipeline entry point (Phase 3/4) and shows the loading modal.
+Build the backend for an explicitly user-started, local microphone recording
+session. The user starts and stops every session. JustSaid is **not** a default
+dialer, an `InCallService`, a carrier-call recorder, or a VoIP application.
 
-> **Deferred to a later phase (maintainer decision):** an outgoing-call UI
-> (keypad + recent calls + contact search firing `ACTION_CALL`) is **not** built
-> here. As the default phone app JustSaid currently has no way to *place* a call
-> from within the app — only to observe/handle calls placed elsewhere. This is a
-> known UX gap tracked for a future phase; it is intentionally out of scope for
-> the Phase 2 crash fix.
+The supported audio contract is deliberately narrow:
 
-## Why not androidx core-telecom / CallsManager?
+- Input: `MediaRecorder.AudioSource.MIC` only.
+- Format: mono, 16 kHz, signed 16-bit PCM in an app-private temporary WAV.
+- Meaning: local microphone audio. Speakerphone may make a remote voice audible,
+  but this is incidental and must not be promised, detected, or attributed.
+- Start: only after an explicit user action from a visible JustSaid activity.
+- Stop: only after an explicit user action. Automatic call detection is outside
+  this phase and must never be required for correctness.
 
-`androidx.core-telecom` `CallsManager#addCall` is for apps that **place their
-own self-managed VoIP calls**. JustSaid handles the user's **carrier** calls as
-the system dialer, which is the `InCallService` + `ROLE_DIALER` contract. Use the
-platform `android.telecom` API. (We still adopt the *spirit* of the telecom
-guidance: let the framework own audio focus/routing, use CallStyle notifications,
-and obey foreground-service rules.)
+## Non-goals [CRITICAL]
 
-## The Audio Capture Reality (READ THIS) [CRITICAL]
+Do not implement or retain:
 
-True stereo **local-left / remote-right** capture needs
-`AudioSource.VOICE_CALL`, which requires `CAPTURE_AUDIO_OUTPUT` — a
-signature/privileged permission **not grantable to a sideloaded APK on Android
-10+**. Being the default dialer does not grant it. Therefore implement a tiered
-`AudioSource` behind an interface and pick the best available at runtime:
+- `ROLE_DIALER`, `InCallService`, `Call`, `TelecomManager`, or dialer intent
+  filters.
+- `AccessibilityService` or an accessibility-based capture workaround.
+- `VOICE_CALL`, `VOICE_UPLINK`, `VOICE_DOWNLINK`, `VOICE_RECOGNITION`, or
+  `VOICE_COMMUNICATION` audio sources.
+- Phone-number lookup, contact lookup, call-log access, call-state polling, or
+  automatic/background capture.
+- Stereo capture, speaker labels, or a claim that the remote party was heard.
 
-| Tier | Mechanism | Result | Availability |
-|---|---|---|---|
-| **1 Stereo** | `MediaRecorder`/`AudioRecord` with `VOICE_CALL` | True L=local, R=remote | Rooted / OEM-permissive / some pre-A10 |
-| **2 Dual-mono** | `VOICE_RECOGNITION` (+ optional AccessibilityService trick) | Both parties, mono, no channel split | Most OEMs when accessibility enabled (the "Cube ACR" technique) |
-| **3 Mic-only** | `MIC` | Local clearly, remote faint on speakerphone | Universal fallback |
+## Owned backend boundaries
 
-- Probe tiers at capture start; record which tier succeeded into call metadata so
-  Phase 3/4 knows whether channel-based speaker attribution is trustworthy.
-- **Never** promise stereo in the UI. The pipeline degrades: Tier 1 → channel
-  attribution; Tiers 2/3 → mono, speakers marked `UNKNOWN` (LLM labels
-  "Unconfirmed", per Constitution S2).
-
-## Architecture & Targeted Dependencies
-
-- **Owned dirs:** `telecom/`, `audio/`, `ui/incall/`, `data/contacts/`.
-- **Platform APIs:** `android.telecom.InCallService`, `Call`, `Call.Callback`,
-  `RoleManager`, `AudioRecord`/`MediaRecorder`, `ContactsContract`,
-  `NotificationCompat.CallStyle`, foreground service type `microphone`+`phoneCall`.
-- **DI:** bind `AudioSource` interface so tests inject `FileAudioSource`
-  (streams a fixture wav) — this is the linchpin of device-free testing.
-
-### Key components
+This phase owns only backend files and manifest/service declarations:
 
 ```
-telecom/
-  JustSaidInCallService.kt   # onCallAdded/Removed → updates CallStateHolder
-  CallStateHolder.kt         # @Singleton StateFlow<CallState> (sealed)
-  CallActions.kt             # answer/hangup wrappers over Call
 audio/
-  AudioSource.kt             # interface { start(): Flow<ShortArray>/frames; stop() }
-  VoiceCallAudioSource.kt    # Tier 1
-  VoiceRecognitionAudioSource.kt  # Tier 2
-  MicAudioSource.kt          # Tier 3
-  AudioSourceFactory.kt      # probes tiers, returns best + tier tag
-  WavWriter.kt               # 16kHz/16-bit PCM; stereo interleave when Tier 1
-  CaptureController.kt       # ties toggle + call-active → write to cacheDir wav
+  MicrophoneAudioSource.kt       # the sole AudioRecord source: MIC + mono
+  WavWriter.kt                   # streaming 16 kHz PCM writer
+  WavFileProvider.kt             # unique private session temp file
+  RecordedSession.kt             # handoff to STT/pipeline
+  SessionPipeline.kt             # pipeline interface
+
+session/
+  CaptureSessionState.kt         # sealed state model
+  CaptureSessionController.kt    # explicit start/stop state machine
+  StaleAudioCleaner.kt           # synchronous startup/session-start sweep
+
 service/
-  CaptureForegroundService.kt  # holds mic during active call; CallStyle notif
-ui/incall/
-  InCallScreen.kt + InCallViewModel.kt   # the 🔴 LISTEN toggle, contact name
-data/contacts/
-  ContactResolver.kt         # number → display name (ContactsContract)
+  MicrophoneCaptureService.kt    # microphone FGS while AudioRecord is active
 ```
 
-### Optional TTS notice
+The future UI calls `CaptureSessionController.start()` and `.stop()`. It does
+not own files, audio, or pipeline transitions.
 
-If `SettingsRepo.ttsNoticeEnabled`, on call `Active` speak once via
-`android.speech.tts.TextToSpeech`: *"This call is being recorded for AI
-assistance."* Play into the call is not guaranteed on all devices — play on the
-device speaker; document the limitation. Off by default.
+## Data handoff contract
 
-## Data Handoff Boundaries
-
-**Consumes (from Phase 1):** `SettingsRepo` (`ttsNoticeEnabled`, `alwaysListen`),
-`ModelPaths` (not used directly but injected), theme/nav, `JustSaidResult`,
-dispatchers.
-
-**Produces (contract for Phase 3):** a `RecordedCall` value handed to a pipeline
-entry interface (Phase 3/4 implement the consumer; Phase 2 defines the type +
-calls the entry point):
 ```kotlin
-// audio/RecordedCall.kt
-enum class CaptureTier { STEREO, DUAL_MONO, MIC_ONLY }
-data class RecordedCall(
-    val wavFile: File,          // in cacheDir; pipeline MUST delete after summary
-    val tier: CaptureTier,      // trust channel attribution only if STEREO
-    val sampleRate: Int,        // 16000
-    val channels: Int,          // 2 if STEREO else 1
-    val phoneNumber: String,
-    val contactName: String?,   // from ContactResolver
-    val durationMs: Long
+enum class CaptureInput { MICROPHONE_MONO }
+
+data class RecordedSession(
+    val id: String,                 // randomly generated; no phone number/PII
+    val wavFile: File,              // app-private temporary file
+    val input: CaptureInput,
+    val sampleRate: Int,            // always 16_000
+    val channels: Int,              // always 1
+    val startedAt: Long,
+    val durationMs: Long,
+    val sessionLabel: String?,      // optional user-entered label only
 )
-// audio/CallPipeline.kt  (interface implemented in Phase 3/4)
-interface CallPipeline { suspend fun process(call: RecordedCall) }
+
+sealed interface CaptureSessionState {
+    data object Idle : CaptureSessionState
+    data class Recording(val sessionId: String, val startedAt: Long) : CaptureSessionState
+    data class Finalizing(val sessionId: String) : CaptureSessionState
+    data class Processing(val sessionId: String) : CaptureSessionState
+    data class Completed(val sessionId: String) : CaptureSessionState
+    data class Failed(val userMessage: String) : CaptureSessionState
+}
+
+interface SessionPipeline {
+    suspend fun process(session: RecordedSession): JustSaidResult<CallSummary>
+}
 ```
-Phase 2 wires: on `Disconnected` && listenToggled → show loading modal →
-`callPipeline.process(recordedCall)` on a background dispatcher. For Phase 2
-standalone, provide a `NoOpCallPipeline` that just deletes the wav, so the flow
-is testable before Phase 3 exists.
 
-**Must NOT do:** transcription, LLM, DB writes. Must not persist the wav beyond
-handing it to the pipeline. Must not store audio anywhere but `cacheDir`.
+`TranscriptSegment.speaker` is always `Speaker.UNKNOWN` for this input. The
+summary guardrail must therefore render extracted items as Unconfirmed.
 
-## Acceptance / Tests
+## Lifecycle
 
-- `WavWriterTest`: header correctness, stereo interleave, mono path.
-- `CaptureControllerTest`: buffer only while toggle ON && call Active; stop on
-  disconnect; wav path is in cacheDir.
-- `AudioSourceFactoryTest`: tier selection logic with faked capabilities.
-- `InCallToggleTest` (Espresso, `FileAudioSource` via Hilt test module + `adb
-  shell telecom add-call` per TESTING.md B): toggle ON → disconnect → loading
-  modal appears → `CallPipeline.process` invoked.
-- Accessibility: LISTEN toggle ≥48dp, high contrast, content description.
+```text
+visible activity + explicit Start tap
+  → check RECORD_AUDIO
+  → synchronously delete stale JustSaid temporary WAVs
+  → create unique private WAV and start microphone FGS
+  → AudioRecord(MIC, MONO) streams PCM to WavWriter
 
----
+explicit Stop tap
+  → stop/release AudioRecord
+  → patch and close WAV header
+  → stop microphone FGS
+  → SessionPipeline: STT → LLM → guardrails
+  → delete WAV in finally, then report result
+```
 
-## 🤖 Worker-Agent Implementation Prompt (copy/paste)
+Processing runs only while the app presents a visible processing state. If that
+visible task is destroyed, the safe outcome is cancellation plus WAV deletion;
+do not disguise long inference as a phone-call foreground service.
 
-**Recommended model: Claude Opus 4.8** (telecom + real-time audio + foreground
-service + graceful-degradation logic is the trickiest non-native phase; use the
-strongest reasoning model). Fallback: Opus 4.7.
+## Privacy, failure, and recovery [CRITICAL]
 
-> You are implementing **Phase 2** of the JustSaid Android app. Read `AGENTS.md`,
-> `docs/00-CONSTITUTION.md`, and `docs/02-dialer-audio-capture.md` and obey them
-> as hard rules. Phase 1 already provides `core/` (`JustSaidResult`,
-> dispatchers, `ModelPaths`), `SettingsRepo`, the Compose theme, and navigation.
-> Do not implement STT, LLM, or Room.
+- Generate each filename with `File.createTempFile()` or a cryptographically
+  random session id. Do not use `currentTimeMillis()` as a unique identifier.
+- `StaleAudioCleaner` deletes only the app's known temporary-session filenames;
+  it runs before recording starts and on app launch.
+- The pipeline owns one `try/finally` deletion point. Check the deletion result;
+  on failure, retain a non-content error marker and retry on the next sweep.
+- Never put raw audio in Room, DataStore, external storage, backups, logs, or a
+  share intent.
+- `onStart()` must be idempotent, `stop()` safe in every state, and a failed
+  AudioRecord init must delete the newly created file.
+
+## Permissions and manifest target
+
+Keep only the permissions and components required for this phase:
+
+```xml
+<uses-permission android:name="android.permission.RECORD_AUDIO" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+<service
+    android:name=".service.MicrophoneCaptureService"
+    android:exported="false"
+    android:foregroundServiceType="microphone" />
+```
+
+Remove all dialer, telecom, call-log, phone-state, contacts, and accessibility
+service declarations as part of the migration task. `POST_NOTIFICATIONS` is
+requested where the platform requires it; the recording session must still have
+a clear foreground-service notification and Stop action.
+
+## Required tests
+
+- `CaptureSessionControllerTest`: legal state transitions, double start/stop,
+  init failure cleanup, and pipeline launch exactly once.
+- `MicrophoneAudioSourceTest`: production source uses only `MIC` and mono.
+- `WavWriterTest`: mono 16 kHz/16-bit header and streaming output.
+- `StaleAudioCleanerTest`: deletes matching stale files only; never exports or
+  touches unrelated cache files.
+- `SessionPipelineWavDeletionTest`: deletion succeeds on STT, LLM, cancellation,
+  and persistence failures.
+- Instrumented test: user-started microphone FGS starts with granted permission,
+  then releases the microphone and stops after explicit Stop.
+
+## Worker-agent prompt (backend only)
+
+> Implement Phase 2 of JustSaid: the **manual microphone capture backend**.
+> Read `AGENTS.md`, `docs/00-CONSTITUTION.md`, this file, and
+> `docs/06-companion-backend-migration.md`. Do not build or modify Compose UI.
+> Do not use telecom, a default-dialer role, an accessibility service, contacts,
+> call logs, call-state listeners, or any AudioRecord source other than `MIC`.
 >
-> **Goal:** Make the app a **default dialer** using the platform
-> `android.telecom` API (NOT androidx core-telecom — that's for self-managed
-> VoIP). Implement `RoleManager` `ROLE_DIALER` request flow and a
-> `JustSaidInCallService` that tracks call lifecycle into a `@Singleton`
-> `CallStateHolder` exposing `StateFlow<CallState>` (sealed:
-> `Idle|Ringing|Active|Held|Disconnected`). Build the in-call Compose screen with
-> a large high-contrast **`🔴 LISTEN FOR LISTS`** toggle and a
-> `NotificationCompat.CallStyle` notification, all under a compliant
-> **foreground service** (types `phoneCall`+`microphone`).
+> Create the `RecordedSession`, `CaptureSessionState`, `SessionPipeline`,
+> `CaptureSessionController`, `StaleAudioCleaner`, `MicrophoneAudioSource`, and
+> `MicrophoneCaptureService` boundaries described above. Use Hilt interfaces and
+> injected dispatchers. `start()` is invoked only from a visible activity after
+> permission grant; `stop()` is explicit. Stream mono 16 kHz/16-bit PCM to a
+> unique private cache WAV. Stop/release capture before starting STT. Delete the
+> temporary WAV on every failure and in the post-processing `finally` block.
 >
-> **Audio capture — tiered with graceful degradation [CRITICAL]:** Implement an
-> `AudioSource` interface and three impls chosen at runtime by
-> `AudioSourceFactory`: Tier 1 `VOICE_CALL` (true stereo L=local/R=remote — may
-> fail without privileged permission; that's expected), Tier 2
-> `VOICE_RECOGNITION` (dual-mono), Tier 3 `MIC` (fallback). Record which tier
-> succeeded in `RecordedCall.tier`. Write audio to a `.wav` in `context.cacheDir`
-> at 16 kHz/16-bit PCM via `WavWriter` (stereo interleave only for Tier 1).
-> Capture ONLY while the LISTEN toggle is ON and the call is Active.
->
-> Resolve the remote number → contact display name via `ContactResolver`
-> (`ContactsContract`). If `SettingsRepo.ttsNoticeEnabled`, speak "This call is
-> being recorded for AI assistance" once on call Active via `TextToSpeech`
-> (device speaker; document that injecting into the call stream isn't guaranteed).
->
-> **Handoff:** define `audio/RecordedCall.kt` (with `CaptureTier` enum) and
-> `audio/CallPipeline.kt` (`interface CallPipeline { suspend fun
-> process(call: RecordedCall) }`) exactly as in the phase doc. On `Disconnected`
-> && the toggle was ON: show a full-screen loading modal and call
-> `callPipeline.process(recordedCall)` on `@DefaultDispatcher`. Provide a
-> `NoOpCallPipeline` (deletes the wav) bound via Hilt so this phase runs
-> standalone; Phase 3/4 will replace the binding.
->
-> **Deliver:** all files under `telecom/`, `audio/`, `service/`, `ui/incall/`,
-> `data/contacts/` per the phase doc, plus manifest entries (dialer intent
-> filters, `InCallService` with `BIND_INCALL_SERVICE` + metadata, foreground
-> service declarations, permissions: `READ_PHONE_STATE`, `READ_CALL_LOG`,
-> `READ_CONTACTS`, `RECORD_AUDIO`, `FOREGROUND_SERVICE`,
-> `FOREGROUND_SERVICE_MICROPHONE`, `POST_NOTIFICATIONS`, `MANAGE_OWN_CALLS`).
-> Add a Hilt module binding `AudioSource`/`AudioSourceFactory` so tests can
-> inject a `FileAudioSource`.
->
-> **Constraints:** No network. Never persist the wav outside `cacheDir`; never
-> store audio in DB/prefs. Let the telecom framework manage audio focus/routing —
-> do not manually poke `AudioManager`/Bluetooth. MVVM + `StateFlow`. All strings
-> in `strings.xml`. Provide unit tests: `WavWriterTest`, `CaptureControllerTest`,
-> `AudioSourceFactoryTest`; and Espresso `InCallToggleTest` using an injected
-> `FileAudioSource` + `adb shell telecom add-call` (see `TESTING.md` §B).
->
-> **Done when:** `assembleDebug` + `testDebugUnitTest` pass; app can be set as
-> default dialer; toggling LISTEN during a mocked call produces a wav in cacheDir
-> and, on hangup, invokes `CallPipeline.process` and shows the loading modal.
+> Update the manifest and Gradle dependencies only to remove obsolete telecom,
+> accessibility, and unneeded permissions and to declare the microphone FGS.
+> Preserve the existing offline-only downloader boundary. Add the JVM and
+> instrumented tests listed in this phase. Do not change UI packages.

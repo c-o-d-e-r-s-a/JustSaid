@@ -1,5 +1,12 @@
 # Phase 5 — Summary UI, SMS Intent Brokerage, Encrypted History, Settings & Export
 
+> **Companion pivot override [CRITICAL]:** Follow
+> `docs/06-companion-backend-migration.md` task 5 where it differs from this
+> legacy phase. New summaries carry an optional user-entered `sessionLabel`, not
+> automatically queried contact or phone data; persistence is an explicit user
+> decision. UI work is intentionally deferred until the backend migration is
+> complete.
+
 > Prerequisite reading: `AGENTS.md`, `docs/00-CONSTITUTION.md` (Text Lifecycle
 > T1–T4, UX U1–U4), Phase 1 (`SettingsRepo`, DB passphrase in Keystore),
 > Phase 4 (`CallSummary`, `SummaryRepo` interface).

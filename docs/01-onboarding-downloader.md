@@ -1,5 +1,10 @@
 # Phase 1 — Onboarding, Legal Gate & Model Download Manager
 
+> **Companion pivot:** This phase does not request a default-dialer role or any
+> call-related permission. After legal acceptance and model readiness it hands
+> off to the manual capture companion shell described in
+> `docs/06-companion-backend-migration.md`.
+
 > Prerequisite reading: `AGENTS.md`, `docs/00-CONSTITUTION.md`.
 > This phase produces the app skeleton + first-run experience. It is the only
 > phase permitted to use the network, and only for downloading model weights.
