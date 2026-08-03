@@ -1,7 +1,5 @@
 package com.justsaid.app.stt
 
-import com.justsaid.app.audio.CaptureInput
-import com.justsaid.app.audio.RecordedCall
 import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.DefaultDispatcher
 import com.justsaid.app.core.JustSaidResult
@@ -131,26 +129,6 @@ class WhisperEngine(
                 bridge.free(handle)
             }
         }
-
-    /**
-     * Temporary bridge for [RecordedCall] consumers until task 4 migrates the pipeline.
-     */
-    suspend fun transcribe(
-        call: RecordedCall,
-        whisperLanguage: String,
-        allowedLanguagesCsv: String = "",
-    ): JustSaidResult<Transcript> = transcribe(call.toSession(), whisperLanguage, allowedLanguagesCsv)
-
-    private fun RecordedCall.toSession() = RecordedSession(
-        id = phoneNumber,
-        wavFile = wavFile,
-        input = CaptureInput.MICROPHONE_MONO,
-        sampleRate = sampleRate,
-        channels = channels,
-        startedAt = 0L,
-        durationMs = durationMs,
-        sessionLabel = contactName,
-    )
 
     /**
      * After the first successful auto-detect window, pins whisper's language hint so

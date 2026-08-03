@@ -50,8 +50,7 @@ object TestCaptureModule {
       return JustSaidResult.Success(
         CallSummary(
           id = 0L,
-          contactName = session.sessionLabel,
-          phoneNumber = session.id,
+          sessionLabel = session.sessionLabel,
           createdAt = session.startedAt,
           items = emptyList(),
           fullTranscript = "",

@@ -248,8 +248,7 @@ class CaptureSessionControllerTest {
 
   private fun dummySummary(session: RecordedSession) = CallSummary(
     id = 0L,
-    contactName = session.sessionLabel,
-    phoneNumber = session.id,
+    sessionLabel = session.sessionLabel,
     createdAt = session.startedAt,
     items = emptyList(),
     fullTranscript = "",

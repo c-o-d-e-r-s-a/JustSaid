@@ -10,6 +10,7 @@ import com.justsaid.app.core.Transcript
 import com.justsaid.app.core.TranscriptSegment
 import com.justsaid.app.llm.LlmSummarizer
 import com.justsaid.app.stt.SttPipeline
+import com.justsaid.app.summary.SummaryEvents
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,10 +33,12 @@ class SessionPipelineWavDeletionTest {
 
     private val stt = mockk<SttPipeline>()
     private val summarizer = mockk<LlmSummarizer>()
+    private val handoff = SummaryEvents()
 
     private fun pipeline() = SessionPipelineImpl(
         stt = stt,
         summarizer = summarizer,
+        summaryHandoff = handoff,
         dispatcher = UnconfinedTestDispatcher(),
     )
 
@@ -56,8 +59,7 @@ class SessionPipelineWavDeletionTest {
 
     private fun summaryFor(session: RecordedSession) = CallSummary(
         id = 0L,
-        contactName = session.sessionLabel,
-        phoneNumber = session.id,
+        sessionLabel = session.sessionLabel,
         createdAt = 123L,
         items = emptyList(),
         fullTranscript = transcript.plainText(),
@@ -75,6 +77,18 @@ class SessionPipelineWavDeletionTest {
         assertThat(session.wavFile.exists()).isFalse()
         assertThat(result).isInstanceOf(JustSaidResult.Success::class.java)
         assertThat((result as JustSaidResult.Success).value.id).isEqualTo(0L)
+        assertThat(handoff.latest.value?.id).isEqualTo(0L)
+        assertThat(handoff.latest.value?.sessionLabel).isEqualTo("meeting")
+    }
+
+    @Test
+    fun `failure does not publish summary`() = runTest {
+        val session = recordedSession(tmp.newFile("call.wav").apply { writeBytes(ByteArray(64)) })
+        coEvery { stt.transcribe(session) } returns JustSaidResult.Failure("stt broke")
+
+        pipeline().process(session)
+
+        assertThat(handoff.latest.value).isNull()
     }
 
     @Test

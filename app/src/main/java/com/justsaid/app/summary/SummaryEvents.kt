@@ -14,12 +14,12 @@ import javax.inject.Singleton
  * is still there when the screen resumes.
  */
 @Singleton
-class SummaryEvents @Inject constructor() {
+class SummaryEvents @Inject constructor() : PendingSummaryHandoff {
 
     private val _latest = MutableStateFlow<CallSummary?>(null)
     val latest: StateFlow<CallSummary?> = _latest.asStateFlow()
 
-    fun publish(summary: CallSummary) {
+    override fun publish(summary: CallSummary) {
         _latest.value = summary
     }
 

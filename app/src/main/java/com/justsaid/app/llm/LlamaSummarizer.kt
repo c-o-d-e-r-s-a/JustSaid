@@ -74,8 +74,7 @@ class LlamaSummarizer(
         return JustSaidResult.Success(
             CallSummary(
                 id = 0L,
-                contactName = session.sessionLabel,
-                phoneNumber = session.id,
+                sessionLabel = session.sessionLabel,
                 createdAt = now(),
                 items = PromiseDeduper.merge(merged),
                 fullTranscript = transcriptText,

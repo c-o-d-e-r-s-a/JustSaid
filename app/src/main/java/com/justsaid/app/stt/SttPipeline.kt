@@ -1,7 +1,5 @@
 package com.justsaid.app.stt
 
-import com.justsaid.app.audio.CaptureInput
-import com.justsaid.app.audio.RecordedCall
 import com.justsaid.app.audio.RecordedSession
 import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.core.Transcript
@@ -14,8 +12,8 @@ import javax.inject.Singleton
 
 /**
  * Phase 3's slice of the session pipeline: resolve the language setting and
- * transcribe. Summarization and the wav lifecycle belong to Phase 4's
- * [com.justsaid.app.pipeline.CallPipelineImpl], which owns the single
+ * transcribe. Summarization and the wav lifecycle belong to
+ * [com.justsaid.app.pipeline.SessionPipelineImpl], which owns the single
  * delete-in-finally point (Constitution A1) so deletion can never happen twice
  * or too early.
  */
@@ -44,19 +42,4 @@ class SttPipeline @Inject constructor(
             is JustSaidResult.Failure -> result
         }
     }
-
-    /** Temporary bridge for [RecordedCall] consumers until task 4 migrates the pipeline. */
-    suspend fun transcribe(call: RecordedCall): JustSaidResult<Transcript> =
-        transcribe(
-            RecordedSession(
-                id = call.phoneNumber,
-                wavFile = call.wavFile,
-                input = CaptureInput.MICROPHONE_MONO,
-                sampleRate = call.sampleRate,
-                channels = call.channels,
-                startedAt = 0L,
-                durationMs = call.durationMs,
-                sessionLabel = call.contactName,
-            ),
-        )
 }

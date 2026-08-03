@@ -8,6 +8,7 @@ import com.justsaid.app.core.JustSaidResult
 import com.justsaid.app.llm.LlmSummarizer
 import com.justsaid.app.session.SessionWavFiles
 import com.justsaid.app.stt.SttPipeline
+import com.justsaid.app.summary.PendingSummaryHandoff
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlinx.coroutines.CancellationException
@@ -16,7 +17,7 @@ import kotlinx.coroutines.withContext
 
 /**
  * Post-capture companion pipeline: STT → bounded LLM summarize (guardrailed) →
- * return summary for a later UI retention decision. Does not persist text.
+ * hand off an unsaved summary for the summary screen. Does not persist text.
  *
  * This is the ONE place the raw `.wav` is deleted — in `finally`, so the
  * radioactive buffer dies on success, on STT/LLM failure, and on any exception
@@ -26,6 +27,7 @@ import kotlinx.coroutines.withContext
 class SessionPipelineImpl @Inject constructor(
     private val stt: SttPipeline,
     private val summarizer: LlmSummarizer,
+    private val summaryHandoff: PendingSummaryHandoff,
     @DefaultDispatcher private val dispatcher: CoroutineDispatcher,
 ) : SessionPipeline {
 
@@ -44,13 +46,18 @@ class SessionPipelineImpl @Inject constructor(
             } finally {
                 SessionWavFiles.deleteVerified(session.wavFile)
             }
-            afterWavDeletion(session, result)
+            afterWavDeletion(result)
         }
 
     private fun afterWavDeletion(
-        session: RecordedSession,
         result: JustSaidResult<CallSummary>?,
-    ): JustSaidResult<CallSummary> = wavDeletionOutcome(session.wavFile.exists(), result)
+    ): JustSaidResult<CallSummary> {
+        val outcome = wavDeletionOutcome(session.wavFile.exists(), result)
+        if (outcome is JustSaidResult.Success && outcome.value.id == 0L) {
+            summaryHandoff.publish(outcome.value)
+        }
+        return outcome
+    }
 
     internal companion object {
         const val PROCESSING_FAILED: String = "Could not finish processing."

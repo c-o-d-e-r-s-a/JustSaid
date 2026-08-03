@@ -2,13 +2,13 @@ package com.justsaid.app.di
 
 import android.content.Context
 import com.justsaid.app.audio.AudioSourceFactory
-import com.justsaid.app.audio.CallPipeline
 import com.justsaid.app.audio.RealAudioSourceFactory
 import com.justsaid.app.audio.SessionPipeline
 import com.justsaid.app.audio.WavFileProvider
 import com.justsaid.app.core.DefaultDispatcher
-import com.justsaid.app.pipeline.CallPipelineImpl
 import com.justsaid.app.pipeline.SessionPipelineImpl
+import com.justsaid.app.summary.PendingSummaryHandoff
+import com.justsaid.app.summary.SummaryEvents
 import com.justsaid.app.session.CaptureServiceGateway
 import com.justsaid.app.session.MicrophoneCaptureServiceGateway
 import com.justsaid.app.session.StaleAudioCleaner
@@ -53,11 +53,11 @@ abstract class CaptureBindsModule {
 
   @Binds
   @Singleton
-  abstract fun bindCallPipeline(impl: CallPipelineImpl): CallPipeline
+  abstract fun bindSessionPipeline(impl: SessionPipelineImpl): SessionPipeline
 
   @Binds
   @Singleton
-  abstract fun bindSessionPipeline(impl: SessionPipelineImpl): SessionPipeline
+  abstract fun bindPendingSummaryHandoff(impl: SummaryEvents): PendingSummaryHandoff
 
   @Binds
   @Singleton
