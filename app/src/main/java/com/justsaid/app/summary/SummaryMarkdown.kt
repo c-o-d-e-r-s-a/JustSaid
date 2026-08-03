@@ -18,8 +18,10 @@ object SummaryMarkdown {
      * [unconfirmedLabel] prefixes items whose speaker could not be confirmed (S2).
      */
     fun render(summary: CallSummary, unconfirmedLabel: String): String = buildString {
-        append(summary.contactName ?: summary.phoneNumber)
-        append(" — ")
+        summary.sessionLabel?.takeIf { it.isNotBlank() }?.let { label ->
+            append(label)
+            append(" — ")
+        }
         append(formatDate(summary.createdAt))
         for (item in summary.items) {
             append("\n\n")

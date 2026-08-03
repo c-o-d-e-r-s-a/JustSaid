@@ -57,8 +57,7 @@ class RoomSummaryRepo @Inject constructor(
 }
 
 private fun CallSummary.toEntity() = CallSummaryEntity(
-    contactName = contactName,
-    phoneNumber = phoneNumber,
+    sessionLabel = sessionLabel,
     createdAt = createdAt,
     fullTranscript = fullTranscript,
 )
@@ -76,8 +75,7 @@ private fun List<PromiseItem>.toEntities() = map {
 
 private fun SummaryWithItems.toDomain() = CallSummary(
     id = summary.id,
-    contactName = summary.contactName,
-    phoneNumber = summary.phoneNumber,
+    sessionLabel = summary.sessionLabel,
     createdAt = summary.createdAt,
     items = items.map {
         PromiseItem(

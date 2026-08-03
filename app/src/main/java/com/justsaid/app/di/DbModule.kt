@@ -3,6 +3,7 @@ package com.justsaid.app.di
 import android.content.Context
 import androidx.room.Room
 import com.justsaid.app.data.db.JustSaidDatabase
+import com.justsaid.app.data.db.MIGRATION_1_2
 import com.justsaid.app.data.db.SqlCipherFactory
 import com.justsaid.app.data.db.SummaryDao
 import com.justsaid.app.data.repo.RoomSummaryRepo
@@ -31,6 +32,7 @@ object DbModule {
     ): JustSaidDatabase =
         Room.databaseBuilder(context, JustSaidDatabase::class.java, "justsaid.db")
             .openHelperFactory(sqlCipherFactory.create())
+            .addMigrations(MIGRATION_1_2)
             .build()
 
     @Provides

@@ -42,9 +42,8 @@ class SummaryDaoTest {
         db.close()
     }
 
-    private fun summary(createdAt: Long, name: String = "Ada") = CallSummaryEntity(
-        contactName = name,
-        phoneNumber = "+15555550123",
+    private fun summary(createdAt: Long, label: String? = "Ada") = CallSummaryEntity(
+        sessionLabel = label,
         createdAt = createdAt,
         fullTranscript = "You: I'll buy milk",
     )
@@ -66,7 +65,7 @@ class SummaryDaoTest {
 
         val loaded = dao.getById(id)
         assertThat(loaded).isNotNull()
-        assertThat(loaded!!.summary.contactName).isEqualTo("Ada")
+        assertThat(loaded!!.summary.sessionLabel).isEqualTo("Ada")
         assertThat(loaded.items).hasSize(2)
         assertThat(loaded.items.map { it.summaryId }.distinct()).containsExactly(id)
         assertThat(loaded.items.first { it.task == "Task 0" }.quantity).isEqualTo("2")
@@ -74,23 +73,23 @@ class SummaryDaoTest {
 
     @Test
     fun observeAll_isNewestFirst() = runTest {
-        dao.insertSummaryWithItems(summary(createdAt = 100L, name = "Old"), emptyList())
-        dao.insertSummaryWithItems(summary(createdAt = 300L, name = "New"), emptyList())
-        dao.insertSummaryWithItems(summary(createdAt = 200L, name = "Mid"), emptyList())
+        dao.insertSummaryWithItems(summary(createdAt = 100L, label = "Old"), emptyList())
+        dao.insertSummaryWithItems(summary(createdAt = 300L, label = "New"), emptyList())
+        dao.insertSummaryWithItems(summary(createdAt = 200L, label = "Mid"), emptyList())
 
         val all = dao.observeAll().first()
-        assertThat(all.map { it.summary.contactName }).containsExactly("New", "Mid", "Old").inOrder()
+        assertThat(all.map { it.summary.sessionLabel }).containsExactly("New", "Mid", "Old").inOrder()
     }
 
     @Test
     fun deleteOlderThan_removesOnlyOldRows() = runTest {
-        dao.insertSummaryWithItems(summary(createdAt = 100L, name = "Old"), items(1))
-        dao.insertSummaryWithItems(summary(createdAt = 500L, name = "New"), items(1))
+        dao.insertSummaryWithItems(summary(createdAt = 100L, label = "Old"), items(1))
+        dao.insertSummaryWithItems(summary(createdAt = 500L, label = "New"), items(1))
 
         dao.deleteOlderThan(cutoffMillis = 300L)
 
         val remaining = dao.observeAll().first()
-        assertThat(remaining.map { it.summary.contactName }).containsExactly("New")
+        assertThat(remaining.map { it.summary.sessionLabel }).containsExactly("New")
     }
 
     @Test
@@ -106,7 +105,7 @@ class SummaryDaoTest {
     @Test
     fun deleteById_cascadesToItems() = runTest {
         val id = dao.insertSummaryWithItems(summary(createdAt = 100L), items(2))
-        val keptId = dao.insertSummaryWithItems(summary(createdAt = 200L, name = "Kept"), items(1))
+        val keptId = dao.insertSummaryWithItems(summary(createdAt = 200L, label = "Kept"), items(1))
 
         dao.deleteById(id)
 

@@ -37,12 +37,22 @@ class SummaryMarkdownTest {
     )
 
     @Test
-    fun `header uses contact name and falls back to number`() {
+    fun `header uses session label and omits phone fallback`() {
         val named = SummaryMarkdown.render(summary(emptyList()), unconfirmedLabel)
         assertThat(named).startsWith("Ada — ")
 
-        val unnamed = SummaryMarkdown.render(summary(emptyList(), contactName = null), unconfirmedLabel)
-        assertThat(unnamed).startsWith("+15555550123 — ")
+        val unnamed = SummaryMarkdown.render(
+            CallSummary(
+                id = 1L,
+                sessionLabel = null,
+                createdAt = 1_752_986_000_000L,
+                items = emptyList(),
+                fullTranscript = "You: I'll buy milk tomorrow",
+            ),
+            unconfirmedLabel,
+        )
+        assertThat(unnamed).doesNotContain("+15555550123")
+        assertThat(unnamed.lines()).hasSize(1)
     }
 
     @Test
