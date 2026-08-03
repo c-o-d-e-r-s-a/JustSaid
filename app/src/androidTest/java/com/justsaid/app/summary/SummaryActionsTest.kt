@@ -48,6 +48,7 @@ class SummaryActionsTest {
 
     @Inject lateinit var summaryEvents: SummaryEvents
     @Inject lateinit var repo: RoomSummaryRepo
+    @Inject lateinit var llmEngine: com.justsaid.app.llm.LlmEngine
 
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
 
@@ -83,7 +84,7 @@ class SummaryActionsTest {
 
     private fun showSummaryScreen() {
         summaryEvents.publish(unsavedSummary())
-        val viewModel = SummaryViewModel(summaryEvents, repo)
+        val viewModel = SummaryViewModel(summaryEvents, repo, llmEngine)
         composeRule.setContent {
             JustSaidTheme {
                 SummaryScreen(onDone = {}, viewModel = viewModel)

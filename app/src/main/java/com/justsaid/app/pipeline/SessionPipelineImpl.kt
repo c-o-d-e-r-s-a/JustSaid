@@ -46,13 +46,14 @@ class SessionPipelineImpl @Inject constructor(
             } finally {
                 SessionWavFiles.deleteVerified(session.wavFile)
             }
-            afterWavDeletion(result)
+            afterWavDeletion(session.wavFile, result)
         }
 
     private fun afterWavDeletion(
+        wavFile: java.io.File,
         result: JustSaidResult<CallSummary>?,
     ): JustSaidResult<CallSummary> {
-        val outcome = wavDeletionOutcome(session.wavFile.exists(), result)
+        val outcome = wavDeletionOutcome(wavFile.exists(), result)
         if (outcome is JustSaidResult.Success && outcome.value.id == 0L) {
             summaryHandoff.publish(outcome.value)
         }
