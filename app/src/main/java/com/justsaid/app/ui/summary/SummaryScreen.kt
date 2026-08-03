@@ -1,5 +1,6 @@
 package com.justsaid.app.ui.summary
 
+import android.content.Intent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -32,7 +33,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.justsaid.app.R
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.PromiseItem
-import com.justsaid.app.export.SmsIntentBuilder
+import com.justsaid.app.export.SummaryShareIntentBuilder
 import com.justsaid.app.summary.SummaryEnglishTranslator
 import com.justsaid.app.summary.SummaryMarkdown
 
@@ -58,48 +59,59 @@ fun SummaryContent(
     onSave: () -> Unit,
     onReadModeSelected: (SummaryReadMode) -> Unit,
     onDone: () -> Unit,
+    showDoneButton: Boolean = true,
+    doneLabel: Int = R.string.summary_done_button,
+    doneContentDesc: Int = R.string.summary_done_content_desc,
+    embedded: Boolean = false,
 ) {
     val summary = state.summary ?: return
-    Surface(modifier = Modifier.fillMaxSize()) {
+    val columnModifier = if (embedded) {
+        Modifier.fillMaxWidth()
+    } else {
+        Modifier
+            .fillMaxSize()
+            .padding(24.dp)
+            .verticalScroll(rememberScrollState())
+    }
+
+    val column = @Composable {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(24.dp),
+            modifier = columnModifier,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                SummaryReadModeRow(
-                    mode = state.readMode,
-                    englishLoading = state.englishLoading,
-                    englishFailed = state.englishFailed,
-                    onSelected = onReadModeSelected,
-                )
-                SummaryBody(
-                    summary = summary,
-                    readMode = state.readMode,
-                    englishView = state.englishView,
-                )
-            }
-
+            SummaryReadModeRow(
+                mode = state.readMode,
+                englishLoading = state.englishLoading,
+                englishFailed = state.englishFailed,
+                onSelected = onReadModeSelected,
+            )
+            SummaryBody(
+                summary = summary,
+                readMode = state.readMode,
+                englishView = state.englishView,
+            )
             SaveButton(saved = state.saved, onSave = onSave)
-            SendSmsButton(summary)
-
-            val doneDesc = stringResource(R.string.summary_done_content_desc)
-            OutlinedButton(
-                onClick = onDone,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 56.dp)
-                    .semantics { contentDescription = doneDesc },
-            ) {
-                Text(stringResource(R.string.summary_done_button), style = MaterialTheme.typography.labelLarge)
+            ShareSummaryButton(summary)
+            if (showDoneButton) {
+                val doneDesc = stringResource(doneContentDesc)
+                OutlinedButton(
+                    onClick = onDone,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 56.dp)
+                        .semantics { contentDescription = doneDesc },
+                ) {
+                    Text(stringResource(doneLabel), style = MaterialTheme.typography.labelLarge)
+                }
             }
+        }
+    }
+
+    if (embedded) {
+        column()
+    } else {
+        Surface(modifier = Modifier.fillMaxSize()) {
+            column()
         }
     }
 }
@@ -111,11 +123,10 @@ fun SummaryBody(
     readMode: SummaryReadMode = SummaryReadMode.AsHeard,
     englishView: SummaryEnglishTranslator.View? = null,
 ) {
+    val title = summary.sessionLabel?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.summary_title_default)
     Text(
-        text = stringResource(
-            R.string.summary_title_with,
-            summary.contactName ?: summary.phoneNumber,
-        ),
+        text = title,
         style = MaterialTheme.typography.headlineMedium,
     )
     Text(
@@ -292,17 +303,21 @@ private fun SaveButton(saved: Boolean, onSave: () -> Unit) {
     }
 }
 
-/** Opens the user's messaging app prefilled — never sends by itself. */
+/** Opens the user's chosen app with summary text prefilled — never sends by itself. */
 @Composable
-fun SendSmsButton(summary: CallSummary) {
+fun ShareSummaryButton(summary: CallSummary) {
     val context = LocalContext.current
-    val name = summary.contactName ?: summary.phoneNumber
     val unconfirmedLabel = stringResource(R.string.summary_unconfirmed)
-    val desc = stringResource(R.string.summary_send_content_desc, name)
+    val desc = stringResource(R.string.summary_share_content_desc)
     Button(
         onClick = {
             val body = SummaryMarkdown.render(summary, unconfirmedLabel)
-            context.startActivity(SmsIntentBuilder.build(summary.phoneNumber, body))
+            context.startActivity(
+                Intent.createChooser(
+                    SummaryShareIntentBuilder.build(body),
+                    context.getString(R.string.export_share_title),
+                ),
+            )
         },
         modifier = Modifier
             .fillMaxWidth()
@@ -310,7 +325,7 @@ fun SendSmsButton(summary: CallSummary) {
             .semantics { contentDescription = desc },
     ) {
         Text(
-            text = stringResource(R.string.summary_send_button, name),
+            text = stringResource(R.string.summary_share_button),
             style = MaterialTheme.typography.labelLarge,
         )
     }

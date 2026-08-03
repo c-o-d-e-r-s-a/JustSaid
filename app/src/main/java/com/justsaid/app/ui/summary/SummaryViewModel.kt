@@ -49,14 +49,18 @@ class SummaryViewModel @Inject constructor(
         viewModelScope.launch {
             summaryEvents.latest.collect { summary ->
                 _state.update { current ->
-                    SummaryUiState(
-                        summary = summary ?: current.summary,
-                        saved = if (summary != null) summary.id != 0L else current.saved,
-                        readMode = SummaryReadMode.AsHeard,
-                        englishView = null,
-                        englishLoading = false,
-                        englishFailed = false,
-                    )
+                    if (summary == null) {
+                        SummaryUiState()
+                    } else {
+                        SummaryUiState(
+                            summary = summary,
+                            saved = summary.id != 0L,
+                            readMode = SummaryReadMode.AsHeard,
+                            englishView = null,
+                            englishLoading = false,
+                            englishFailed = false,
+                        )
+                    }
                 }
             }
         }

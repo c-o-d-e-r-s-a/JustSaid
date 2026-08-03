@@ -1,7 +1,5 @@
 package com.justsaid.app.ui.settings
 
-import android.content.Intent
-import android.provider.Settings
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.material3.FilterChip
@@ -32,7 +30,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -120,8 +117,6 @@ fun SettingsContent(
                 onChanged = onAutoCleanupChanged,
             )
 
-            CaptureUnlockRow()
-
             val clearDesc = stringResource(R.string.settings_clear_content_desc)
             Button(
                 onClick = { confirmClear = true },
@@ -175,36 +170,6 @@ fun SettingsContent(
                 }
             },
         )
-    }
-}
-
-/**
- * The phone blocks in-call listening for third-party apps until the user enables the
- * JustSaid accessibility service; this row explains that in plain words and jumps
- * straight to the system Accessibility settings (deepest link the platform allows).
- */
-@Composable
-private fun CaptureUnlockRow() {
-    val context = LocalContext.current
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = stringResource(R.string.settings_capture_unlock_title),
-            style = MaterialTheme.typography.titleLarge,
-        )
-        Text(
-            text = stringResource(R.string.settings_capture_unlock_desc),
-            style = MaterialTheme.typography.bodyMedium,
-        )
-        val buttonDesc = stringResource(R.string.settings_capture_unlock_content_desc)
-        OutlinedButton(
-            onClick = { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 56.dp)
-                .semantics { contentDescription = buttonDesc },
-        ) {
-            Text(stringResource(R.string.settings_capture_unlock_button), style = MaterialTheme.typography.labelLarge)
-        }
     }
 }
 

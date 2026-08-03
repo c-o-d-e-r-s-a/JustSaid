@@ -7,8 +7,8 @@ import androidx.compose.ui.test.performClick
 import androidx.test.espresso.intent.Intents
 import androidx.test.espresso.intent.Intents.intended
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasAction
-import androidx.test.espresso.intent.matcher.IntentMatchers.hasData
 import androidx.test.espresso.intent.matcher.IntentMatchers.hasExtra
+import androidx.test.espresso.intent.matcher.IntentMatchers.hasType
 import androidx.test.platform.app.InstrumentationRegistry
 import com.justsaid.app.R
 import com.justsaid.app.core.CallSummary
@@ -25,6 +25,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.hamcrest.CoreMatchers.allOf
 import org.hamcrest.CoreMatchers.containsString
+import org.hamcrest.CoreMatchers.equalTo
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Before
@@ -33,9 +34,8 @@ import org.junit.Test
 import javax.inject.Inject
 
 /**
- * Phase 5 acceptance: Save writes a row into the encrypted store; "Send via SMS"
- * fires `ACTION_SENDTO` with the `smsto:` number and prefilled body (asserted via
- * Espresso-Intents; nothing is ever auto-sent).
+ * Save writes a row into the encrypted store; Share fires ACTION_SEND with prefilled text
+ * (asserted via Espresso-Intents; nothing is ever auto-sent).
  */
 @HiltAndroidTest
 class SummaryActionsTest {
@@ -67,8 +67,7 @@ class SummaryActionsTest {
 
     private fun unsavedSummary() = CallSummary(
         id = 0L,
-        contactName = "Ada",
-        phoneNumber = "+15555550123",
+        sessionLabel = "Ada",
         createdAt = System.currentTimeMillis(),
         items = listOf(
             PromiseItem(
@@ -104,26 +103,28 @@ class SummaryActionsTest {
             withTimeout(5_000) { repo.observeAll().first { it.isNotEmpty() } }
         }
         assertEquals(1, saved.size)
-        assertEquals("Ada", saved.first().contactName)
+        assertEquals("Ada", saved.first().sessionLabel)
         assertEquals("Buy milk", saved.first().items.single().task)
     }
 
     @Test
-    fun send_firesActionSendToWithPrefilledBody() {
+    fun share_firesActionSendWithPrefilledBody() {
         showSummaryScreen()
 
         composeRule
-            .onNodeWithContentDescription(context.getString(R.string.summary_send_content_desc, "Ada"))
+            .onNodeWithContentDescription(context.getString(R.string.summary_share_content_desc))
             .performClick()
 
         intended(
             allOf(
-                hasAction(Intent.ACTION_SENDTO),
-                hasData(android.net.Uri.parse("smsto:+15555550123")),
-                hasExtra(
-                    org.hamcrest.CoreMatchers.equalTo("sms_body"),
-                    containsString("Buy milk"),
-                ),
+                hasAction(Intent.ACTION_CHOOSER),
+            ),
+        )
+        intended(
+            allOf(
+                hasAction(Intent.ACTION_SEND),
+                hasType("text/plain"),
+                hasExtra(equalTo(Intent.EXTRA_TEXT), containsString("Buy milk")),
             ),
         )
     }

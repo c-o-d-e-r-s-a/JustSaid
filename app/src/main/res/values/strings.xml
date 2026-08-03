@@ -20,17 +20,26 @@
     <string name="download_percent">%1$d%%</string>
     <string name="download_done">All set! Opening JustSaid\u2026</string>
 
-    <!-- ── Home placeholder ── -->
-    <string name="home_title">You\u2019re all set</string>
-    <string name="home_subtitle">JustSaid is ready. The rest of the app arrives in the next updates.</string>
-    <string name="home_dialer_prompt">To listen to your calls, JustSaid needs to be your phone app.</string>
-    <string name="home_set_dialer_button">Make JustSaid my phone app</string>
-    <string name="home_set_dialer_content_desc">Make JustSaid the default phone app</string>
-    <string name="home_dialer_active">JustSaid is your phone app.</string>
-    <string name="home_permissions_prompt">JustSaid needs your permission to hear calls and show who is calling.</string>
+    <!-- ── Companion home (capture) ── -->
+    <string name="home_title">Listen for tasks</string>
+    <string name="home_subtitle">Start listening during a call, then stop when you are done. JustSaid writes down tasks and promises on this phone only.</string>
+    <string name="home_session_label_hint">Label (optional)</string>
+    <string name="home_session_label_content_desc">Optional label for this listening session, for example a name or topic</string>
+    <string name="home_start_button">Start listening</string>
+    <string name="home_start_content_desc">Start listening through the microphone</string>
+    <string name="home_stop_button">Stop listening</string>
+    <string name="home_stop_content_desc">Stop listening and process what was heard</string>
+    <string name="home_listening_active">Listening now\u2026</string>
+    <string name="home_processing">Going through what was heard\u2026</string>
+    <string name="home_summary_heading">Your summary</string>
+    <string name="home_summary_dismiss_button">Clear summary</string>
+    <string name="home_summary_dismiss_content_desc">Clear this summary from the screen</string>
+    <string name="home_error_dismiss_button">OK</string>
+    <string name="home_error_dismiss_content_desc">Dismiss the error message</string>
+    <string name="home_permissions_prompt">JustSaid needs microphone access to listen, and may need notification permission to show while listening.</string>
     <string name="home_permissions_button">Allow permissions</string>
-    <string name="home_permissions_content_desc">Allow the permissions JustSaid needs</string>
-    <string name="home_permissions_active">All permissions granted.</string>
+    <string name="home_permissions_content_desc">Allow microphone and notification permissions</string>
+    <string name="home_permissions_active">Microphone and notifications are allowed.</string>
 
     <!-- ── In-call screen ── -->
     <string name="incall_unknown_caller">Unknown caller</string>
@@ -71,7 +80,7 @@
     <string name="tts_recording_notice">This call is being recorded for AI assistance.</string>
 
     <!-- ── Summary screen ── -->
-    <string name="summary_title_with">Call with %1$s</string>
+    <string name="summary_title_default">Listening session</string>
     <string name="summary_unconfirmed">Unconfirmed</string>
     <string name="summary_no_items">No tasks or promises were found in this call.</string>
     <string name="summary_heard_title">What we heard</string>
@@ -86,18 +95,19 @@
     <string name="summary_save_content_desc">Save this summary to your history</string>
     <string name="summary_saved_button">\u2713 Saved to History</string>
     <string name="summary_saved_content_desc">This summary is saved in your history</string>
-    <string name="summary_send_button">\u2709\uFE0F Send to %1$s via SMS</string>
-    <string name="summary_send_content_desc">Send this summary to %1$s as a text message</string>
+    <string name="summary_share_button">\u2709\uFE0F Share summary</string>
+    <string name="summary_share_content_desc">Share this summary as text through another app</string>
     <string name="summary_done_button">Done</string>
     <string name="summary_done_content_desc">Close this summary</string>
     <string name="summary_quantity">[%1$s]</string>
 
     <!-- ── History ── -->
-    <string name="history_title">Saved calls</string>
-    <string name="history_open_button">\uD83D\uDCD6 Saved calls</string>
-    <string name="history_open_content_desc">See your saved call summaries</string>
-    <string name="history_empty">Nothing saved yet. After a call, tap Save to keep the summary here.</string>
-    <string name="history_row_content_desc">Open the summary of the call with %1$s</string>
+    <string name="history_title">Saved summaries</string>
+    <string name="history_open_button">\uD83D\uDCD6 Saved summaries</string>
+    <string name="history_open_content_desc">See your saved summaries</string>
+    <string name="history_empty">Nothing saved yet. After listening, tap Save to keep the summary here.</string>
+    <string name="history_unlabeled">Unlabeled session</string>
+    <string name="history_row_content_desc">Open the summary for %1$s</string>
     <string name="history_item_count">%1$d tasks</string>
     <string name="history_export_all_button">Share everything</string>
     <string name="history_export_all_content_desc">Share all saved summaries as one file</string>
@@ -118,14 +128,14 @@
     <string name="settings_title">Settings</string>
     <string name="settings_open_button">\u2699\uFE0F Settings</string>
     <string name="settings_open_content_desc">Open settings</string>
-    <string name="settings_language_title">Call language</string>
-    <string name="settings_language_desc">Which language JustSaid listens for on your calls.</string>
+    <string name="settings_language_title">Listening language</string>
+    <string name="settings_language_desc">Which language JustSaid listens for.</string>
     <string name="settings_language_auto">Any language</string>
     <string name="settings_language_en">English only</string>
     <string name="settings_language_auto_content_desc">Listen for any language</string>
     <string name="settings_language_en_content_desc">Listen for English only</string>
     <string name="settings_spoken_languages_title">Languages I use on calls</string>
-    <string name="settings_spoken_languages_desc">Tap every language you actually speak on calls (include all you mix, e.g. Gujarati and Hindi). JustSaid listens only within your picks. Leave all off to allow any language.</string>
+    <string name="settings_spoken_languages_desc">Tap every language you actually speak (include all you mix). JustSaid listens only within your picks. Leave all off to allow any language.</string>
     <string name="settings_spoken_language_chip_content_desc">%1$s, %2$s</string>
     <string name="settings_spoken_language_selected">selected</string>
     <string name="settings_spoken_language_not_selected">not selected</string>
@@ -135,12 +145,6 @@
     <string name="settings_cleanup_title">Tidy up old summaries</string>
     <string name="settings_cleanup_desc">Remove summaries older than 30 days automatically.</string>
     <string name="settings_cleanup_content_desc">Turn automatic tidy-up of old summaries on or off</string>
-    <string name="capture_unlock_service_label">JustSaid call listening</string>
-    <string name="capture_unlock_service_desc">Lets JustSaid hear the call while you use the red Listen button. JustSaid never reads your screen, never watches other apps, and never sends anything off this phone.</string>
-    <string name="settings_capture_unlock_title">Allow call listening</string>
-    <string name="settings_capture_unlock_desc">Your phone blocks listening during calls until you switch on \u201cJustSaid call listening\u201d in the Accessibility settings. Tap the button, find JustSaid in the list, and turn it on.</string>
-    <string name="settings_capture_unlock_button">Open phone settings</string>
-    <string name="settings_capture_unlock_content_desc">Open the phone settings page where call listening can be allowed</string>
     <string name="settings_clear_button">Clear all history</string>
     <string name="settings_clear_content_desc">Delete every saved summary</string>
     <string name="settings_clear_confirm_title">Delete everything?</string>

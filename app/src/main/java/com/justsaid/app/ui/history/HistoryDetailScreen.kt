@@ -31,7 +31,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.justsaid.app.R
-import com.justsaid.app.ui.summary.SendSmsButton
+import com.justsaid.app.ui.summary.ShareSummaryButton
 import com.justsaid.app.ui.summary.SummaryBody
 
 /** Read-only view of one saved summary with Export / Send / Delete (T3/T4). */
@@ -97,7 +97,7 @@ fun HistoryDetailScreen(
                     Text(stringResource(R.string.detail_export_button), style = MaterialTheme.typography.labelLarge)
                 }
 
-                SendSmsButton(summary)
+                ShareSummaryButton(summary)
 
                 val deleteDesc = stringResource(R.string.detail_delete_content_desc)
                 Button(

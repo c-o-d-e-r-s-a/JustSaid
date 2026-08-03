@@ -33,8 +33,7 @@ class AccessibilityTest {
 
     private val summary = CallSummary(
         id = 1L,
-        contactName = "Ada",
-        phoneNumber = "+15555550123",
+        sessionLabel = "Ada",
         createdAt = System.currentTimeMillis(),
         items = listOf(
             PromiseItem(
@@ -63,7 +62,7 @@ class AccessibilityTest {
 
         listOf(
             context.getString(R.string.summary_save_content_desc),
-            context.getString(R.string.summary_send_content_desc, "Ada"),
+            context.getString(R.string.summary_share_content_desc),
             context.getString(R.string.summary_done_content_desc),
         ).forEach { desc ->
             composeRule.onNodeWithContentDescription(desc)

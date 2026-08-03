@@ -146,7 +146,7 @@ dependencies {
     // MockWebServer drives ModelDownloaderTest (Range resume, checksum reject, progress).
     testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     // Robolectric drives the JVM tests that need a real Android runtime:
-    // SummaryDaoTest (Room), SmsIntentBuilderTest (Intent/Uri), SummaryExporterTest (PdfDocument).
+    // SummaryDaoTest (Room), SummaryShareIntentBuilderTest (Intent), SummaryExporterTest (PdfDocument).
     testImplementation("org.robolectric:robolectric:4.14.1")
     testImplementation("androidx.test.ext:junit:1.2.1")
     testImplementation("androidx.test:core-ktx:1.6.1")

@@ -90,8 +90,9 @@ fun HistoryContent(
 
 @Composable
 private fun HistoryRow(summary: CallSummary, onOpen: () -> Unit) {
-    val name = summary.contactName ?: summary.phoneNumber
-    val desc = stringResource(R.string.history_row_content_desc, name)
+    val label = summary.sessionLabel?.takeIf { it.isNotBlank() }
+        ?: stringResource(R.string.history_unlabeled)
+    val desc = stringResource(R.string.history_row_content_desc, label)
     Surface(
         color = MaterialTheme.colorScheme.surface,
         shape = RoundedCornerShape(12.dp),
@@ -105,7 +106,7 @@ private fun HistoryRow(summary: CallSummary, onOpen: () -> Unit) {
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(text = name, style = MaterialTheme.typography.titleLarge)
+            Text(text = label, style = MaterialTheme.typography.titleLarge)
             Text(
                 text = SummaryMarkdown.formatDate(summary.createdAt) +
                     "  •  " +
