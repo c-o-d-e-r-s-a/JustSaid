@@ -99,13 +99,27 @@ class SessionPipelineWavDeletionTest {
     }
 
     @Test
-    fun `wav deleted when STT throws`() = runTest {
+    fun `wav deleted when STT throws and failure is returned`() = runTest {
         val session = recordedSession(tmp.newFile("call.wav").apply { writeBytes(ByteArray(64)) })
         coEvery { stt.transcribe(session) } throws IllegalStateException("native crash surfaced")
 
-        val thrown = runCatching { pipeline().process(session) }.exceptionOrNull()
+        val result = pipeline().process(session)
 
-        assertThat(thrown).isInstanceOf(IllegalStateException::class.java)
+        assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
+        assertThat((result as JustSaidResult.Failure).reason)
+            .isEqualTo(SessionPipelineImpl.PROCESSING_FAILED)
+        assertThat(session.wavFile.exists()).isFalse()
+    }
+
+    @Test
+    fun `summarizer throw returns failure without escaping`() = runTest {
+        val session = recordedSession(tmp.newFile("call.wav").apply { writeBytes(ByteArray(64)) })
+        coEvery { stt.transcribe(session) } returns JustSaidResult.Success(transcript)
+        coEvery { summarizer.summarize(session, transcript) } throws RuntimeException("llm native crash")
+
+        val result = pipeline().process(session)
+
+        assertThat(result).isInstanceOf(JustSaidResult.Failure::class.java)
         assertThat(session.wavFile.exists()).isFalse()
     }
 

@@ -12,24 +12,24 @@ import javax.inject.Singleton
  */
 @Singleton
 class StaleAudioCleaner @Inject constructor(
-  @ApplicationContext private val context: Context,
+    @ApplicationContext private val context: Context,
 ) {
-  companion object {
-    /** Prefix for [com.justsaid.app.audio.WavFileProvider] session temps. */
-    const val SESSION_WAV_PREFIX: String = "justsaid_session_"
-  }
+    companion object {
+        /** Prefix for [com.justsaid.app.audio.WavFileProvider] session temps. */
+        const val SESSION_WAV_PREFIX: String = "justsaid_session_"
+    }
 
-  /**
-   * @return number of session WAV files removed.
-   */
-  fun clean(): Int {
-    val dir = context.cacheDir
-    if (!dir.isDirectory) return 0
-    return dir.listFiles()
-      ?.count { file -> file.isSessionWav() && file.delete() }
-      ?: 0
-  }
+    /**
+     * @return number of session WAV files successfully removed.
+     */
+    fun clean(): Int {
+        val dir = context.cacheDir
+        if (!dir.isDirectory) return 0
+        return dir.listFiles()
+            ?.count { file -> file.isSessionWav() && SessionWavFiles.deleteVerified(file) }
+            ?: 0
+    }
 
-  private fun File.isSessionWav(): Boolean =
-    isFile && name.startsWith(SESSION_WAV_PREFIX) && name.endsWith(".wav")
+    private fun File.isSessionWav(): Boolean =
+        isFile && name.startsWith(SESSION_WAV_PREFIX) && name.endsWith(".wav")
 }
