@@ -1,110 +1,112 @@
 <?xml version="1.0" encoding="utf-8"?>
+
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
+
+
     <!--
+
       INTERNET is used by exactly ONE component: data/download/ModelDownloader
+
       (OkHttp -> Hugging Face) to fetch model weights during onboarding.
+
       No other code path may open a socket. See AGENTS.md Prime Directive #1.
+
     -->
+
     <uses-permission android:name="android.permission.INTERNET" />
 
-    <!-- ── Phase 2: default dialer + call lifecycle + tiered audio capture ── -->
-    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
-    <uses-permission android:name="android.permission.READ_CALL_LOG" />
-    <uses-permission android:name="android.permission.READ_CONTACTS" />
+
+
+    <!-- Manual microphone capture companion (Phase 2 / migration task 1). -->
+
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <!-- Lets us accept an incoming call from our own in-call UI (CallActions.answer()). -->
-    <uses-permission android:name="android.permission.ANSWER_PHONE_CALLS" />
-    <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
+
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <!-- Required so the CallStyle notification's full-screen intent surfaces the in-call UI
-         over the lock screen / other apps (auto-granted to the default dialer on Android 14+). -->
-    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
-    <!-- Required for the phoneCall foreground-service type on Android 14+ (held as default dialer). -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
+
+
 
     <application
+
         android:name=".JustSaidApp"
+
         android:allowBackup="false"
+
         android:dataExtractionRules="@xml/data_extraction_rules"
+
         android:fullBackupContent="@xml/backup_rules"
+
         android:icon="@mipmap/ic_launcher"
+
         android:roundIcon="@mipmap/ic_launcher"
+
         android:label="@string/app_name"
+
         android:supportsRtl="true"
+
         android:theme="@style/Theme.JustSaid">
 
+
+
         <activity
+
             android:name=".MainActivity"
+
             android:exported="true"
+
             android:theme="@style/Theme.JustSaid">
+
             <intent-filter>
+
                 <action android:name="android.intent.action.MAIN" />
+
                 <category android:name="android.intent.category.LAUNCHER" />
+
             </intent-filter>
 
-            <!-- Dialer role: the app must be able to handle DIAL intents to be
-                 eligible as the default phone app (ROLE_DIALER). -->
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.DIAL" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="tel" />
-            </intent-filter>
         </activity>
 
-        <!-- Bound by the telecom framework once ROLE_DIALER is held. -->
-        <service
-            android:name=".telecom.JustSaidInCallService"
-            android:exported="true"
-            android:permission="android.permission.BIND_INCALL_SERVICE">
-            <meta-data
-                android:name="android.telecom.IN_CALL_SERVICE_UI"
-                android:value="true" />
-            <intent-filter>
-                <action android:name="android.telecom.InCallService" />
-            </intent-filter>
-        </service>
 
-        <!-- Holds the mic during an active call + shows the CallStyle notification. -->
+
         <service
-            android:name=".service.CaptureForegroundService"
+            android:name=".service.MicrophoneCaptureService"
             android:exported="false"
-            android:foregroundServiceType="phoneCall|microphone" />
+            android:foregroundServiceType="microphone" />
 
-        <!-- No-op service; being ENABLED lifts Android's in-call mic silencing for
-             third-party capture (concurrent-capture policy exemption). Reads nothing:
-             see CaptureUnlockAccessibilityService + capture_unlock_service.xml. -->
-        <service
-            android:name=".service.CaptureUnlockAccessibilityService"
-            android:exported="true"
-            android:label="@string/capture_unlock_service_label"
-            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
-            <intent-filter>
-                <action android:name="android.accessibilityservice.AccessibilityService" />
-            </intent-filter>
-            <meta-data
-                android:name="android.accessibilityservice"
-                android:resource="@xml/capture_unlock_service" />
-        </service>
+
 
         <!-- Shares exported PDF/Text summaries (Phase 5). Scoped strictly to the
+
              export cache dir — see res/xml/export_paths.xml. -->
+
         <provider
+
             android:name="androidx.core.content.FileProvider"
+
             android:authorities="${applicationId}.fileprovider"
+
             android:exported="false"
+
             android:grantUriPermissions="true">
+
             <meta-data
+
                 android:name="android.support.FILE_PROVIDER_PATHS"
+
                 android:resource="@xml/export_paths" />
+
         </provider>
+
+
 
     </application>
 
+
+
 </manifest>
+
+

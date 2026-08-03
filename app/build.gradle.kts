@@ -23,7 +23,7 @@ android {
 
     defaultConfig {
         applicationId = "com.justsaid.app"
-        minSdk = 29            // Android 10 — required for InCallService role + scoped storage model
+        minSdk = 29            // Android 10 — scoped storage baseline for private capture buffers
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
@@ -112,10 +112,6 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.navigation:navigation-compose:2.8.5")
-
-    // ── Telecom (default dialer: InCallService + RoleManager) ──
-    // NOTE: this is the platform android.telecom API, no extra dep needed.
-    // androidx.core-telecom is intentionally NOT used (that is for self-managed VoIP).
 
     // ── Encrypted storage: Room + SQLCipher ──
     implementation("androidx.room:room-runtime:2.6.1")

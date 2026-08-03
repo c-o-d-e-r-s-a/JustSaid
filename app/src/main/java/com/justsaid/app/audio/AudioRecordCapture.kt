@@ -12,12 +12,11 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.isActive
 
 /**
- * Shared `AudioRecord` capture used by every tier. Differences between tiers are just
+ * Shared `AudioRecord` capture used by the microphone source. Differences are just
  * the [audioSource] constant and [channelConfig]; the read loop is identical.
  *
- * The RECORD_AUDIO permission is enforced upstream (the foreground service is only started
- * for an active call after the dialer role + permission are granted); a missing permission
- * or unsupported config surfaces as an empty flow rather than a crash (E1/E2).
+ * A missing RECORD_AUDIO permission or unsupported config surfaces as an empty flow
+ * rather than a crash (E1/E2).
  */
 @SuppressLint("MissingPermission")
 internal fun audioRecordFrames(
@@ -72,14 +71,5 @@ internal const val STEREO: Int = AudioFormat.CHANNEL_IN_STEREO
 
 /** Named for readability at call sites. */
 internal object Src {
-    const val VOICE_CALL = MediaRecorder.AudioSource.VOICE_CALL
-    const val VOICE_RECOGNITION = MediaRecorder.AudioSource.VOICE_RECOGNITION
-    const val VOICE_COMMUNICATION = MediaRecorder.AudioSource.VOICE_COMMUNICATION
     const val MIC = MediaRecorder.AudioSource.MIC
 }
-
-/** Tier-2 sources to try in order; first with live PCM during a call wins. */
-internal val DUAL_MONO_SOURCES: IntArray = intArrayOf(
-    Src.VOICE_RECOGNITION,
-    Src.VOICE_COMMUNICATION,
-)

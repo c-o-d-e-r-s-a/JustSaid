@@ -4,11 +4,10 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
 
 /**
- * Tier 3 — universal fallback via `MIC`. Captures the local user clearly; the remote party
- * only if the call is on speakerphone. Always available given RECORD_AUDIO, so it is the
- * guaranteed last resort. Mono, speakers UNKNOWN.
+ * Sole production capture source: [MediaRecorder.AudioSource.MIC], mono 16 kHz.
+ * Remote voices are incidental (speakerphone); never attributed downstream.
  */
-class MicAudioSource(
+class MicrophoneAudioSource(
     private val dispatcher: CoroutineDispatcher,
 ) : AudioSource {
     override val tier: CaptureTier = CaptureTier.MIC_ONLY

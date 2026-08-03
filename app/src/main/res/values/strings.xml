@@ -55,6 +55,13 @@
     <string name="incall_speaker_content_desc_on">Speakerphone is on. Tap to use the earpiece.</string>
     <string name="incall_speaker_content_desc_off">Speakerphone is off. Tap to put the call on speaker.</string>
 
+    <!-- ── Manual capture notification ── -->
+    <string name="capture_channel_name">Listening</string>
+    <string name="capture_channel_desc">Shows while JustSaid is listening through the microphone.</string>
+    <string name="capture_notification_title">JustSaid is listening</string>
+    <string name="capture_notification_text">Tap Stop when you are done.</string>
+    <string name="capture_notification_stop">Stop</string>
+
     <!-- ── Call notification ── -->
     <string name="incall_channel_name">Ongoing calls</string>
     <string name="incall_channel_desc">Shows a notification while a call is in progress.</string>

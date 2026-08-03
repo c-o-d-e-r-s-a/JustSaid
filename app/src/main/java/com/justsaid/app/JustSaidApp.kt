@@ -2,11 +2,13 @@ package com.justsaid.app
 
 import android.app.Application
 import com.justsaid.app.core.DbPassphraseProvider
+import com.justsaid.app.session.StaleAudioCleaner
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * Application entry point. Hilt's object graph roots here.
@@ -17,12 +19,15 @@ import kotlinx.coroutines.launch
 @HiltAndroidApp
 class JustSaidApp : Application() {
 
+    @Inject lateinit var staleAudioCleaner: StaleAudioCleaner
+
     private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onCreate() {
         super.onCreate()
         appScope.launch {
             DbPassphraseProvider(applicationContext).ensurePassphrase()
+            staleAudioCleaner.clean()
         }
     }
 }
