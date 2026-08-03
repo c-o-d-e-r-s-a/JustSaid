@@ -18,11 +18,9 @@ import com.justsaid.app.BuildConfig
 import com.justsaid.app.MainActivity
 import com.justsaid.app.R
 import com.justsaid.app.session.CaptureSessionController
+import com.justsaid.app.session.ForegroundActivationCoordinator
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
-import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 
 /**
  * Microphone foreground service while [AudioRecord] is active. Started only when capture
@@ -32,6 +30,7 @@ import kotlinx.coroutines.withTimeout
 class MicrophoneCaptureService : LifecycleService() {
 
     @Inject lateinit var captureSessionController: CaptureSessionController
+    @Inject lateinit var activationCoordinator: ForegroundActivationCoordinator
 
     private var inForeground = false
 
@@ -48,15 +47,25 @@ class MicrophoneCaptureService : LifecycleService() {
                 inForeground = false
                 stopSelf()
             }
-            ACTION_START, null -> activateForeground()
+            ACTION_START, null -> activateForeground(intent)
         }
         return START_NOT_STICKY
     }
 
-    private fun activateForeground() {
+    private fun activateForeground(intent: Intent?) {
+        val attemptId = intent?.getStringExtra(EXTRA_ATTEMPT_ID)
         val ok = enterForeground()
         inForeground = ok
-        signalForegroundActivation(ok)
+        if (attemptId != null) {
+            val accepted = activationCoordinator.complete(attemptId, ok)
+            if (!accepted) {
+                if (BuildConfig.DEBUG) {
+                    Log.w(TAG, "ignoring late foreground activation for attempt $attemptId")
+                }
+                stopSelf()
+                return
+            }
+        }
         if (!ok) stopSelf()
     }
 
@@ -126,43 +135,12 @@ class MicrophoneCaptureService : LifecycleService() {
         private const val ACTION_START = "com.justsaid.app.action.CAPTURE_START"
         private const val ACTION_USER_STOP = "com.justsaid.app.action.CAPTURE_STOP"
         private const val ACTION_SHUTDOWN = "com.justsaid.app.action.CAPTURE_SHUTDOWN"
-        private const val FOREGROUND_ACTIVATION_TIMEOUT_MS = 10_000L
+        const val EXTRA_ATTEMPT_ID = "com.justsaid.app.extra.FOREGROUND_ATTEMPT_ID"
 
-        private val activationLock = Any()
-        private var activationAwaiter: CompletableDeferred<Boolean>? = null
-
-        /**
-         * Starts the service and suspends until [onStartCommand] confirms foreground entry
-         * or reports refusal.
-         *
-         * @return false if the platform refused foreground start (caller must abort capture).
-         */
-        suspend fun startAndAwaitForeground(
-            context: Context,
-            timeoutMs: Long = FOREGROUND_ACTIVATION_TIMEOUT_MS,
-        ): Boolean {
-            val awaiter = CompletableDeferred<Boolean>()
-            synchronized(activationLock) {
-                activationAwaiter?.cancel()
-                activationAwaiter = awaiter
-            }
-            if (!startService(context)) {
-                clearActivationAwaiter(awaiter)
-                return false
-            }
-            return try {
-                withTimeout(timeoutMs) { awaiter.await() }
-            } catch (_: TimeoutCancellationException) {
-                if (BuildConfig.DEBUG) Log.w(TAG, "foreground activation timed out")
-                false
-            } finally {
-                clearActivationAwaiter(awaiter)
-            }
-        }
-
-        private fun startService(context: Context): Boolean {
+        fun startService(context: Context, attemptId: String): Boolean {
             val intent = Intent(context, MicrophoneCaptureService::class.java)
                 .setAction(ACTION_START)
+                .putExtra(EXTRA_ATTEMPT_ID, attemptId)
             return try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
@@ -176,24 +154,14 @@ class MicrophoneCaptureService : LifecycleService() {
             }
         }
 
-        private fun signalForegroundActivation(success: Boolean) {
-            synchronized(activationLock) {
-                activationAwaiter?.complete(success)
-            }
-        }
-
-        private fun clearActivationAwaiter(awaiter: CompletableDeferred<Boolean>) {
-            synchronized(activationLock) {
-                if (activationAwaiter === awaiter) {
-                    activationAwaiter = null
-                }
-            }
-        }
-
         fun shutdown(context: Context) {
-            context.startService(
-                Intent(context, MicrophoneCaptureService::class.java).setAction(ACTION_SHUTDOWN),
-            )
+            try {
+                context.startService(
+                    Intent(context, MicrophoneCaptureService::class.java).setAction(ACTION_SHUTDOWN),
+                )
+            } catch (e: Exception) {
+                if (BuildConfig.DEBUG) Log.w(TAG, "shutdown refused", e)
+            }
         }
     }
 }

@@ -13,6 +13,7 @@ import com.justsaid.app.audio.WavWriter
 import com.justsaid.app.core.CallSummary
 import com.justsaid.app.core.JustSaidResult
 import io.mockk.coEvery
+import io.mockk.every
 import io.mockk.mockk
 import java.io.IOException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -64,6 +65,7 @@ class CaptureSessionControllerTest {
     gatewayShutdowns = 0
     gateway.startResult = true
     lastSession = null
+    every { staleCleaner.clean() } returns StaleCleanupResult(removedCount = 0, failedFiles = emptyList())
     coEvery { pipeline.process(any()) } coAnswers {
       pipelineCalls++
       val session = firstArg<RecordedSession>()
@@ -219,6 +221,73 @@ class CaptureSessionControllerTest {
     awaitTerminalState(controller)
     assertThat(pipelineCalls).isEqualTo(0)
     assertThat(controller.state.value).isInstanceOf(CaptureSessionState.Failed::class.java)
+    assertThat((controller.state.value as CaptureSessionState.Failed).userMessage)
+      .isEqualTo(CaptureSessionController.NO_AUDIO)
+  }
+
+  @Test
+  fun `source failure with wav deletion failure surfaces cleanup error`() = runTest(dispatcher) {
+    val factory = AudioSourceFactory { ThrowingAudioSource() }
+    val controller = controller(
+      factory = factory,
+      wavProvider = undeletableWavProvider(),
+    )
+    controller.start()
+    awaitTerminalState(controller)
+    assertThat(controller.state.value).isInstanceOf(CaptureSessionState.Failed::class.java)
+    assertThat((controller.state.value as CaptureSessionState.Failed).userMessage)
+      .isEqualTo(CaptureSessionController.TEMP_AUDIO_CLEANUP_FAILED)
+    assertThat(pipelineCalls).isEqualTo(0)
+    assertThat(gatewayShutdowns).isEqualTo(1)
+  }
+
+  @Test
+  fun `empty capture deletion failure surfaces cleanup error`() = runTest(dispatcher) {
+    val emptyFixture = tmp.newFile("empty2.wav")
+    writeMonoFixture(emptyFixture, samples = shortArrayOf())
+    val controller = controller(
+      fixtureFile = emptyFixture,
+      wavProvider = undeletableWavProvider(),
+    )
+    controller.start()
+    dispatcher.scheduler.advanceUntilIdle()
+    controller.stop()
+    awaitTerminalState(controller)
+    assertThat(pipelineCalls).isEqualTo(0)
+    assertThat(controller.state.value).isInstanceOf(CaptureSessionState.Failed::class.java)
+    assertThat((controller.state.value as CaptureSessionState.Failed).userMessage)
+      .isEqualTo(CaptureSessionController.TEMP_AUDIO_CLEANUP_FAILED)
+  }
+
+  @Test
+  fun `stale cleanup failure blocks capture without starting service`() = runTest(dispatcher) {
+    val cacheDir = tmp.newFolder("cache")
+    val stale = File(cacheDir, "${StaleAudioCleaner.SESSION_WAV_PREFIX}stale.wav").apply {
+      writeBytes(byteArrayOf(1))
+    }
+    val lock = java.io.RandomAccessFile(stale, "rw")
+    try {
+      val controller = controller(
+        staleCleaner = StaleAudioCleaner(FakeContext(cacheDir)),
+      )
+      controller.start()
+      dispatcher.scheduler.advanceUntilIdle()
+      assertThat(controller.state.value).isInstanceOf(CaptureSessionState.Failed::class.java)
+      assertThat((controller.state.value as CaptureSessionState.Failed).userMessage)
+        .isEqualTo(CaptureSessionController.TEMP_AUDIO_CLEANUP_FAILED)
+      assertThat(gatewayStarts).isEqualTo(0)
+      assertThat(pipelineCalls).isEqualTo(0)
+    } finally {
+      lock.close()
+      stale.delete()
+    }
+  }
+
+  private fun undeletableWavProvider(): WavFileProvider = WavFileProvider {
+    val base = File.createTempFile("justsaid_session_", ".wav", outputDir)
+    object : File(base.absolutePath) {
+      override fun delete(): Boolean = false
+    }
   }
 
   private fun controller(
@@ -228,6 +297,7 @@ class CaptureSessionControllerTest {
       File.createTempFile("justsaid_session_", ".wav", outputDir)
     },
     captureGateway: CaptureServiceGateway = gateway,
+    staleCleaner: StaleAudioCleaner = this.staleCleaner,
   ): CaptureSessionController = CaptureSessionController(
     audioSourceFactory = factory,
     wavFileProvider = wavProvider,

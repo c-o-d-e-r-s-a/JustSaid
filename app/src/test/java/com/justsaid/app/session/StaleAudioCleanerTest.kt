@@ -38,17 +38,37 @@ class StaleAudioCleanerTest {
       writeText("outside")
     }
 
-    val removed = cleaner(cacheDir).clean()
+    val result = cleaner(cacheDir).clean()
 
-    assertThat(removed).isEqualTo(1)
+    assertThat(result.removedCount).isEqualTo(1)
+    assertThat(result.isClean).isTrue()
     assertThat(stale.exists()).isFalse()
     assertThat(otherWav.exists()).isTrue()
     assertThat(outside.exists()).isTrue()
   }
 
   @Test
-  fun `returns zero when cache dir is empty`() {
-    assertThat(cleaner(cacheDir).clean()).isEqualTo(0)
+  fun `returns clean result when cache dir is empty`() {
+    val result = cleaner(cacheDir).clean()
+    assertThat(result.removedCount).isEqualTo(0)
+    assertThat(result.isClean).isTrue()
+  }
+
+  @Test
+  fun `stale cleanup failure retains undeleted session wav`() {
+    val stale = File(cacheDir, "${StaleAudioCleaner.SESSION_WAV_PREFIX}locked.wav").apply {
+      writeBytes(byteArrayOf(1))
+    }
+    val lock = java.io.RandomAccessFile(stale, "rw")
+    try {
+      val result = cleaner(cacheDir).clean()
+      assertThat(result.isClean).isFalse()
+      assertThat(result.failedFiles).containsExactly(stale)
+      assertThat(stale.exists()).isTrue()
+    } finally {
+      lock.close()
+      stale.delete()
+    }
   }
 
   private fun cleaner(dir: File): StaleAudioCleaner =

@@ -79,7 +79,10 @@ class CaptureSessionController @Inject constructor(
             -> Unit
         }
 
-        staleAudioCleaner.clean()
+        if (!staleAudioCleaner.clean().isClean) {
+            _state.value = CaptureSessionState.Failed(userMessage = TEMP_AUDIO_CLEANUP_FAILED)
+            return
+        }
         pendingLabel = sessionLabel
 
         val sessionId = UUID.randomUUID().toString()
@@ -88,7 +91,10 @@ class CaptureSessionController @Inject constructor(
         val file = wavFileProvider.newWavFile()
 
         if (!captureServiceGateway.start()) {
-            SessionWavFiles.deleteVerified(file)
+            if (!deleteTempWavOrFail(file)) {
+                captureServiceGateway.shutdown()
+                return
+            }
             _state.value = CaptureSessionState.Failed(userMessage = START_FAILED)
             return
         }
@@ -98,7 +104,7 @@ class CaptureSessionController @Inject constructor(
             writer.open()
         } catch (_: Exception) {
             captureServiceGateway.shutdown()
-            SessionWavFiles.deleteVerified(file)
+            if (!deleteTempWavOrFail(file)) return
             _state.value = CaptureSessionState.Failed(userMessage = START_FAILED)
             return
         }
@@ -143,7 +149,7 @@ class CaptureSessionController @Inject constructor(
         captureServiceGateway.shutdown()
 
         if (capture.writer.dataBytes == 0L) {
-            SessionWavFiles.deleteVerified(capture.file)
+            if (!deleteTempWavOrFail(capture.file)) return
             _state.value = CaptureSessionState.Failed(userMessage = NO_AUDIO)
             return
         }
@@ -185,11 +191,20 @@ class CaptureSessionController @Inject constructor(
             active = null
             if (capture != null) {
                 stopCaptureIo(capture)
-                SessionWavFiles.deleteVerified(capture.file)
+                if (!deleteTempWavOrFail(capture.file)) {
+                    captureServiceGateway.shutdown()
+                    return
+                }
             }
             captureServiceGateway.shutdown()
             _state.value = CaptureSessionState.Failed(userMessage)
         }
+    }
+
+    private fun deleteTempWavOrFail(file: java.io.File): Boolean {
+        if (SessionWavFiles.deleteVerified(file)) return true
+        _state.value = CaptureSessionState.Failed(userMessage = TEMP_AUDIO_CLEANUP_FAILED)
+        return false
     }
 
     private suspend fun stopCaptureIo(capture: ActiveCapture) {
@@ -216,5 +231,6 @@ class CaptureSessionController @Inject constructor(
         const val STOP_FAILED: String = "Could not finish listening."
         const val NO_AUDIO: String = "No audio was captured."
         const val PROCESSING_FAILED: String = "Could not finish processing."
+        const val TEMP_AUDIO_CLEANUP_FAILED: String = SessionWavFiles.TEMP_AUDIO_DELETION_FAILED
     }
 }
