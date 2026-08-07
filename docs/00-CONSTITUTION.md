@@ -1,125 +1,130 @@
-# 00 — The Constitution (Non-Negotiable Engineering Standards)
+# 00 — Routine Runner Constitution
 
-Every phase inherits these rules. A violation is a **high-priority bug**. This
-document is referenced by all worker-agent prompts. Read with `AGENTS.md`.
+Every phase inherits these non-negotiable rules. A rule marked **[CRITICAL]** is
+a release blocker. Read this document with `AGENTS.md` before implementation.
 
----
+## Product boundary
 
-## Privacy & Network
+The app is a local, user-triggered routine runner. It performs a short list of
+low-risk actions previously created or approved by that same user. It is not a
+general agent, call recorder, default dialer, VoIP client, payment assistant,
+Accessibility controller, cloud service, or workflow marketplace.
 
-- **P1 [CRITICAL]** No network access except `data/download/ModelDownloader`
-  (OkHttp → Hugging Face). No analytics, crash reporting, ads, GMS, Firebase.
-- **P2 [CRITICAL]** No content (audio, transcript, summary, session label) is
-  ever logged in release builds. Debug logs gated behind `BuildConfig.DEBUG`
-  and must never include full transcript text.
-- **P3** The app must pass an "airplane-mode" test: with wifi/data off (after
-  models are present), every feature except downloading works fully.
+## Privacy and network
 
-## Audio Lifecycle  {#audio-lifecycle}
+- **P1 [CRITICAL]** The only network boundary is
+  `data/download/ModelDownloader` fetching explicitly configured model files.
+  No analytics, ads, telemetry, crash reporting, GMS/Firebase service,
+  marketplace, account, sync, socket, or DNS lookup elsewhere.
+- **P2 [CRITICAL]** Never log command audio, full command transcripts, routine
+  names containing user data, checklist contents, model prompts, or execution
+  slots in release builds. Debug logs must be metadata-only.
+- **P3** With models installed, every feature works in airplane mode. External
+  apps launched by a user-approved target are outside this app's network
+  boundary and must be visibly identified as such.
 
-- **A1 [CRITICAL]** The raw `.wav` buffer lives only in the app's private cache
-  (`context.cacheDir`/private files). It is **deleted immediately** after the
-  summary pipeline completes — on **both success and failure** paths (use a
-  `try/finally` around the STT→LLM pipeline). A synchronous stale-buffer sweep
-  runs before a new session and on app startup; deletion failure is surfaced and
-  retried, never ignored.
-- **A2** No raw audio in Room, SharedPreferences, MediaStore, or backups.
-  `android:allowBackup="false"`, and exclude cache via backup rules.
-- **A3** WAV format: mono, 16 kHz, 16-bit PCM. Input is `MIC` only. The app must
-  never claim to capture carrier-call output, remote audio, or separate speakers.
+## Authority and action safety
 
-## Text Lifecycle
+- **R1 [CRITICAL]** A routine contains only values of the sealed `RoutineAction`
+  type. V1 actions are `StartLocalTimer`, `SetApprovedFocusMode`,
+  `LaunchApprovedTarget`, `ShowLocalChecklist`, and
+  `ShowLocalNotification`.
+- **R2 [CRITICAL]** No action may originate from an LLM response, a voice
+  transcript, or an imported template. These sources can at most select an
+  already-saved local routine and fill schema-approved, non-sensitive slots.
+- **R3 [CRITICAL]** An explicit user gesture, widget action, or Quick Settings
+  tile starts every run. No scheduled/background/boot/start-on-notification
+  execution and no always-listening microphone in v1.
+- **R4 [CRITICAL]** Payments, purchases, transfers, credentials, OTPs,
+  biometrics, account recovery/settings, messages/emails/posts/forms, deletion,
+  installation, permissions, arbitrary intents/URLs, and UI-node/gesture
+  automation are prohibited. They must be unrepresentable in the data model.
+- **R5 [CRITICAL]** Every external target is created and approved locally. A
+  routine refers to it by opaque local ID; it never stores a package or URI
+  provided by an untrusted source.
+- **R6** Validate the full routine before the first action. Missing permission,
+  target, or state means fail closed: stop the run and explain what the user can
+  fix. Do not skip to a guessed alternative.
+- **R7** The execution UI always displays current action, completed actions,
+  failures/skips, and a visible Stop control. Stop is idempotent.
 
-- **T1** Transcripts + summaries are retained **indefinitely by default** in the
-  encrypted DB.
-- **T2** Optional auto-cleanup setting (**OFF by default**) deletes text older
-  than 30 days. Implemented as a DAO query filtered by `createdAt`.
-- **T3** "Clear History" (settings) wipes all rows after a confirmation dialog.
-- **T4** Export to PDF/Text is available per-summary and for full history.
+## Voice-command lifecycle
 
-## Native Memory  {#native-memory}
+- **V1 [CRITICAL]** Voice capture is optional, visibly user-initiated, and
+  bounded to 15 seconds. There is no foreground microphone service or wake
+  word.
+- **V2 [CRITICAL]** Raw audio is private-cache-only and deleted in a verified
+  `finally` path immediately after STT ends, including failure/cancellation.
+  No audio in Room, preferences, MediaStore, exports, backups, or logs.
+- **V3** Do not save the full command transcript. Retain only the resulting
+  routine ID and minimal non-sensitive execution receipt when needed.
 
-- **N1 [CRITICAL]** Model context is created once (`nativeInit`) and reused for
-  all chunks of one capture session. Never reload the model per chunk/segment.
-- **N2** Per-chunk inference must not allocate the large working buffers; size
-  them at init from max-chunk assumptions. This is the practical form of the
-  "zero runtime allocation" requirement (zero *per-chunk* heap growth).
-- **N3** Every native handle is freed exactly once via `nativeFree`, which is
-  null/zero-safe and idempotent. Free order: state → context → backend.
-- **N4** Inference runs off the main thread. Thread count = physical big-core
-  count, queried at init (default 4 if unknown).
-- **N5** Implement VAD to skip silence; chunk long audio (~30s windows with a
-  small overlap) to keep buffers stable and prevent hallucination loops.
+## Local-model constraints
 
-## Speaker Attribution
+- **M1 [CRITICAL]** Kotlin validates a model response against a closed schema
+  and an existing local routine ID before any execution. Invalid, ambiguous, or
+  unknown output has zero side effects.
+- **M2** Bound the prompt to the command plus local routine names/IDs. Do not
+  feed browser/UI data, account data, long recordings, or arbitrary imported
+  files into the model.
+- **M3** Native contexts follow init once → reuse for the request → idempotent
+  free. Inference is off-main-thread and must not log content in release.
 
-- **S1 [CRITICAL]** All capture-session audio is single-channel microphone
-  input. Every transcript segment is `UNKNOWN`; the model must never infer
-  "You", a remote party, or a contact from microphone audio.
-- **S2** Every extracted promise from a capture session is rendered
-  **Unconfirmed** unless a future, separately specified capture method provides
-  trustworthy attribution.
+## Template sharing
 
-## Summarization Guardrails (enforced in CODE, not just the prompt)
+- **S1 [CRITICAL]** There is no in-app public platform, account, discovery
+  feed, remote installer, or remote execution path.
+- **S2** A local `.routine.json` import is an untrusted template containing only
+  allowed action kinds and generic suggestions. It cannot contain code, a
+  package name, URI, token, secret, permission, nested routine, loop, or model
+  prompt.
+- **S3** The import screen renders every action and requires local target mapping
+  and explicit save before the template becomes a routine.
 
-- **G1 [CRITICAL]** After the LLM returns, `summary/PromiseParser` validates
-  every item's `proof` quote is a **literal substring** of the transcript
-  (normalized: lowercase, collapse whitespace). Items failing this are DROPPED.
-- **G2** Neutral, concise tone. No creative filler. Ambiguous → omit or
-  "Unconfirmed". Enforced by prompt AND by G1.
-- **G3** Quantities only when explicitly stated; otherwise omit the `[Qty]`.
-- **G4** Temperature ≤ 0.2 for the summarizer.
+## UX and accessibility
 
-## UX & Accessibility
+- **U1** Compose single-activity UI. Primary actions are one tap; no hidden
+  gesture or jargon-heavy dashboard.
+- **U2** WCAG AA: 4.5:1 contrast, 18sp base text, 48dp touch targets, and
+  TalkBack content descriptions.
+- **U3** Explain what each routine will do before first execution. Never imply
+  that the app controls an external app beyond the documented action.
 
-- **U1** Single-activity Compose. Every primary action is one tap.
-- **U2** WCAG AA: contrast ≥ 4.5:1, base font ≥ 18sp (scales with system),
-  touch targets ≥ 48dp, full TalkBack content descriptions.
-- **U3** No modal traps except the unskippable first-run legal screen and the
-  processing state after a user ends a capture session.
-- **U4** No technical error codes shown to users; friendly messages + a retry.
+## Error and persistence rules
 
-## Error Handling & Results
+- **E1** Layer boundaries return `JustSaidResult<T>`; no exceptions cross them.
+- **E2** Routine and target data are encrypted at rest. Store only data needed
+  to run/review the routine and minimal execution receipts; never command audio
+  or complete transcripts.
+- **E3** Clear Library requires confirmation and removes routines, targets, and
+  receipts. Failed cleanup is surfaced and retryable.
 
-- **E1** Layer boundaries return `core.JustSaidResult<T>` (sealed
-  `Success`/`Failure(reason)`); do not throw across boundaries.
-- **E2** The pipeline is resilient: STT failure still deletes the wav and shows
-  a friendly "couldn't understand this recording" state.
-
-## Shared Types (defined in Phase boundaries; do not redefine)
+## Shared target types
 
 ```kotlin
-// core/JustSaidResult.kt
-sealed interface JustSaidResult<out T> {
-    data class Success<T>(val value: T) : JustSaidResult<T>
-    data class Failure(val reason: String, val cause: Throwable? = null) : JustSaidResult<Nothing>
+sealed interface RoutineAction {
+    data class StartLocalTimer(val durationMinutes: Int) : RoutineAction
+    data class SetApprovedFocusMode(val enabled: Boolean) : RoutineAction
+    data class LaunchApprovedTarget(val targetId: String) : RoutineAction
+    data class ShowLocalChecklist(val checklistId: String) : RoutineAction
+    data class ShowLocalNotification(val messageId: String) : RoutineAction
 }
 
-// Produced by Phase 3 (STT), consumed by Phase 4 (LLM)
-data class TranscriptSegment(
-    val speaker: Speaker,        // LOCAL, REMOTE, UNKNOWN
-    val text: String,
-    val startMs: Long,
-    val endMs: Long
+data class Routine(
+    val id: String,
+    val displayName: String,
+    val actions: List<RoutineAction>,
 )
-enum class Speaker { LOCAL, REMOTE, UNKNOWN }
-data class Transcript(val segments: List<TranscriptSegment>) {
-    fun plainText(): String  // "You: ...\nName: ..." rendering for the LLM + substring checks
-}
 
-// Produced by Phase 4 (LLM/parser), consumed by Phase 5 (history/SMS/export)
-data class PromiseItem(
-    val task: String,
-    val quantity: String?,       // null if not explicitly stated
-    val proofQuote: String,      // verbatim substring of transcript (G1)
-    val attributedTo: Speaker,   // UNKNOWN => rendered "Unconfirmed"
-    val confirmed: Boolean
+data class CommandResolution(
+    val routineId: String,
+    val slots: Map<String, String>,
 )
-data class CallSummary(
-    val id: Long,
-    val sessionLabel: String?,   // optional user-entered label; never a queried call number
-    val createdAt: Long,
-    val items: List<PromiseItem>,
-    val fullTranscript: String   // kept per T1; NOT audio
-)
+
+sealed interface ActionReceipt {
+    val actionIndex: Int
+    data class Completed(override val actionIndex: Int) : ActionReceipt
+    data class Skipped(override val actionIndex: Int, val reason: String) : ActionReceipt
+    data class Failed(override val actionIndex: Int, val reason: String) : ActionReceipt
+}
 ```

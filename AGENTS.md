@@ -1,203 +1,161 @@
-# AGENTS.md — JustSaid Worker-Agent Rulebook
+# AGENTS.md — Routine Runner Worker-Agent Rulebook
 
-> Read this file **in full** before writing any code. It is the law. Code that
-> violates a rule marked **[CRITICAL]** is a high-priority bug and will be
-> rejected. When in doubt, follow the "Constitution" in `docs/00-CONSTITUTION.md`.
+> Read this file and `docs/00-CONSTITUTION.md` in full before changing code.
+> Rules marked **[CRITICAL]** are release blockers.
 
-JustSaid is a **100% on-device, local-first** Android call companion. A user
-explicitly starts a microphone capture session around a normal phone call;
-JustSaid transcribes that microphone audio (whisper.cpp) and summarizes it into
-"promises/tasks with verbatim proof" (llama.cpp). It is not a default dialer,
-carrier-call recorder, or VoIP provider. **Zero cloud. No analytics. No
-telemetry.**
+JustSaid *(temporary project name)* is a **100% on-device, local-first Android
+routine runner**. A person explicitly activates a routine. The app executes
+only a typed, reviewed, low-risk action list. On-device speech-to-text and a
+small local model may resolve a short command to an existing routine; they do
+not control the phone freely. **Zero cloud. No analytics. No telemetry.**
 
----
+The product is not a call recorder, default dialer, VoIP service, generic
+Accessibility controller, payment tool, or autonomous background agent.
 
-## 0. The Prime Directives [CRITICAL]
+## 0. Prime Directives [CRITICAL]
 
-1. **Offline or die.** The ONLY code allowed to touch the network is the model
-   downloader (`data/download/`, Phase 1) using OkHttp against a Hugging Face
-   URL. ANY other network call, socket, DNS lookup, analytics/crash SDK, or
-   GMS/Firebase dependency is a **critical security failure**. Do not add them.
-2. **Raw audio is radioactive.** The temporary `.wav` buffer MUST be deleted the
-   instant the LLM summary completes (success OR failure). No raw audio is ever
-   persisted, backed up, or logged. See `docs/00-CONSTITUTION.md#audio-lifecycle`.
-3. **No promise without proof.** Every extracted task/promise MUST carry a
-   verbatim quote copied from the transcript. If code cannot locate the quote as
-   a substring of the transcript, the item is DROPPED, not guessed.
-4. **The user is your grandparent.** Single-tap actions, huge high-contrast
-   text, no jargon, no dashboards, no gestures. WCAG AA minimum.
-5. **Do not modify files outside your assigned Phase** unless the Phase prompt
-   explicitly lists the file. Never refactor another phase's code "to help."
+1. **Offline or die.** The only code allowed to touch the network is the model
+   downloader in `data/download/` using OkHttp against an approved Hugging Face
+   model URL. No other HTTP, sockets, DNS, analytics, crash SDK, ads,
+   Firebase/GMS service, account, marketplace, sync, or telemetry.
+2. **Typed actions only.** A routine may contain only the sealed action types
+   in `routine/`. No JavaScript, shell commands, reflection, arbitrary intents,
+   arbitrary URLs, arbitrary UI nodes, or model-generated action payloads.
+3. **The model never has authority.** It can return only an ID of an existing
+   local routine plus schema-validated slots. A missing/ambiguous match must
+   stop and ask the user; it must never select a likely action.
+4. **Explicit execution.** Every run begins from a visible user action, widget,
+   or Quick Settings tile. No schedules, boot receivers, background triggers,
+   always-listening wake words, or automatic retry loops in v1.
+5. **Fail closed.** Resolve all target package, URI, permissions, and action
+   parameters before execution. Any unexpected condition stops the remaining
+   actions and reports what happened. Never substitute, improvise, or retry an
+   action that might change data.
+6. **High-impact actions are prohibited.** Never automate payment, purchase,
+   banking, password/OTP/biometric entry, account recovery/settings, message or
+   email sending, posting, submission, deletion, app installation, or
+   permission changes.
+7. **No public executable workflow platform.** Imported routine files are
+   untrusted declarative templates, not code. They cannot grant capabilities;
+   the user must review them and map every external target to a local approved
+   target before saving.
+8. **Command audio is radioactive.** Temporary raw command audio lives only in
+   private cache and is deleted immediately after STT succeeds or fails. Never
+   persist, back up, export, or log command audio or a full command transcript.
+9. **The user is your grandparent.** One-tap primary actions, large
+   high-contrast text, simple explanations of every action, and WCAG AA.
+10. **Stay in scope.** Do not modify files outside the assigned phase unless
+    that phase prompt names them. Do not refactor a different phase “to help.”
 
----
+## 1. Target Folder Structure
 
-## 1. Canonical Folder Structure
+The current tree contains retired capture code until Phase 6 migration. New
+routine-runner code belongs in this target layout; do not invent top-level
+directories.
 
-Worker agents MUST place files exactly here. Do not invent new top-level dirs.
-
-```
+```text
 JustSaid/
-├─ app/
-│  ├─ build.gradle.kts
-│  ├─ proguard-rules.pro
-│  └─ src/
-│     ├─ main/
-│     │  ├─ AndroidManifest.xml
-│     │  ├─ java/com/justsaid/app/
-│     │  │  ├─ JustSaidApp.kt            # @HiltAndroidApp entry
-│     │  │  ├─ MainActivity.kt           # single-activity Compose host
-│     │  │  ├─ di/                       # Hilt modules (AudioModule, DbModule, ...)
-│     │  │  ├─ ui/
-│     │  │  │  ├─ theme/                 # high-contrast, large-text theme
-│     │  │  │  ├─ onboarding/            # Phase 1: legal + downloader screens
-│     │  │  │  ├─ capture/               # Phase 2: manual capture controls (future UI)
-│     │  │  │  ├─ summary/               # Phase 4/5: summary + Save/Send buttons
-│     │  │  │  ├─ history/               # Phase 5: saved summaries list
-│     │  │  │  └─ settings/              # Phase 5: language, TTS, cleanup, clear
-│     │  │  ├─ audio/                    # Phase 2: microphone capture engine
-│     │  │  ├─ session/                  # Phase 2: CaptureSession state machine
-│     │  │  ├─ stt/                      # Phase 3: WhisperEngine (Kotlin wrapper)
-│     │  │  ├─ llm/                      # Phase 4: LlmEngine (Kotlin wrapper) + prompts
-│     │  │  ├─ summary/                  # Phase 4: PromiseParser, guardrails
-│     │  │  ├─ data/
-│     │  │  │  ├─ db/                    # Room entities, DAOs, SQLCipher factory
-│     │  │  │  ├─ repo/                  # repositories (SummaryRepo, SettingsRepo)
-│     │  │  │  ├─ download/              # Phase 1: ModelDownloader (OkHttp)
-│     │  │  │  └─ contacts/              # ContactResolver (ContentProvider)
-│     │  │  ├─ export/                   # Phase 5: PDF/Text exporter, SMS intent
-│     │  │  └─ core/                     # constants, Result types, dispatchers
-│     │  ├─ cpp/                         # NDK / JNI (Phase 3 & 4)
-│     │  │  ├─ CMakeLists.txt
-│     │  │  ├─ justsaid_whisper_jni.cpp
-│     │  │  ├─ justsaid_llm_jni.cpp
-│     │  │  ├─ whisper.cpp/              # vendored source (git submodule/checkout)
-│     │  │  └─ llama.cpp/                # vendored source (git submodule/checkout)
-│     │  └─ res/                         # layouts-free (Compose), strings, colors
-│     ├─ test/                          # JVM unit tests (no device needed)
-│     │  ├─ java/com/justsaid/app/...
-│     │  └─ resources/fixtures/          # small mock .wav + transcript .txt
-│     └─ androidTest/                   # Espresso + instrumented JNI tests
-├─ docs/                                # THE BLUEPRINT (read your phase file)
-│  ├─ 00-CONSTITUTION.md
-│  ├─ 01-onboarding-downloader.md
-│  ├─ 02-dialer-audio-capture.md          # manual companion capture phase
-│  ├─ 03-whisper-ndk.md
-│  ├─ 04-llm-summarizer.md
-│  ├─ 05-intent-history.md
-│  └─ 06-companion-backend-migration.md
-├─ .gitignore
-├─ AGENTS.md   (this file)
-├─ TESTING.md
-└─ README.md
+├─ app/src/main/
+│  ├─ java/com/justsaid/app/
+│  │  ├─ JustSaidApp.kt
+│  │  ├─ MainActivity.kt
+│  │  ├─ core/                 # Result types, clock, dispatchers
+│  │  ├─ di/
+│  │  ├─ command/              # typed input, short STT, resolver contract
+│  │  ├─ routine/              # sealed actions, validator, executor, gate
+│  │  ├─ data/
+│  │  │  ├─ db/                # encrypted routine/receipt storage
+│  │  │  ├─ repo/
+│  │  │  └─ download/          # the only network boundary
+│  │  ├─ ui/
+│  │  │  ├─ onboarding/
+│  │  │  ├─ routines/
+│  │  │  ├─ run/
+│  │  │  ├─ library/
+│  │  │  └─ settings/
+│  │  └─ export/               # local template import/export only
+│  ├─ cpp/                     # whisper.cpp and llama.cpp JNI
+│  └─ res/
+├─ docs/
+├─ AGENTS.md
+├─ README.md
+└─ TESTING.md
 ```
 
----
+## 2. Kotlin and Architecture Rules
 
-## 2. Kotlin / Architecture Conventions
+- Kotlin only for app code; C++17 only for native model bridges. Gradle Kotlin
+  DSL only—never Groovy build files.
+- Compose Material3, single activity, MVVM. A ViewModel exposes immutable
+  `StateFlow<UiState>` and owns side effects.
+- Hilt constructor injection. Every platform dependency—clock, package
+  launcher, DND gateway, notification gateway, command recorder, model paths—
+  is behind an interface with a fakeable implementation.
+- Coroutines and Flow only. Inject `@IoDispatcher` and `@DefaultDispatcher`;
+  never hardcode `Dispatchers.IO`.
+- Boundaries return `JustSaidResult<T>`; do not throw across layers.
+- No global mutable state other than Hilt-scoped singletons. All user-facing
+  strings belong in `res/values/strings.xml`.
 
-- **Language:** Kotlin only for app code; C++17 for native. No Java.
-- **Build scripts [CRITICAL]:** Gradle Kotlin DSL only (`build.gradle.kts`,
-  `settings.gradle.kts`). **Never** output Groovy (`build.gradle`). If you catch
-  yourself writing Groovy syntax, stop and convert to Kotlin DSL. Chosen for
-  type safety + IDE autocomplete, which reduces generated-config errors.
-- **UI:** Jetbrains Compose + Material3. Single-activity (`MainActivity`) +
-  `navigation-compose`. No XML layouts (strings/colors XML is fine).
-- **Architecture:** MVVM. `ViewModel` exposes immutable `StateFlow<UiState>`.
-  UI is a pure function of state. Side effects go through the ViewModel.
-- **DI:** Hilt, constructor injection. **[CRITICAL for testing]** Every hardware
-  dependency (audio source, model paths, clock, contacts) is injected behind an
-  interface so unit tests can substitute fakes with no physical device.
-- **Concurrency:** Coroutines + `Flow`. Inject `CoroutineDispatcher`
-  (`@IoDispatcher`, `@DefaultDispatcher`) — never hardcode `Dispatchers.IO`.
-- **Errors:** Return a sealed `JustSaidResult<T>` (`Success`/`Failure`) from
-  repos/engines. Do not throw across layer boundaries. See `core/`.
-- **No global mutable state.** No singletons except Hilt-scoped ones.
-- **Strings:** All user-facing text in `res/values/strings.xml` for
-  accessibility/locale. No hardcoded UI strings in Kotlin.
+## 3. Action and Execution Rules [CRITICAL]
 
----
+The Phase 2 sealed action model is the sole authority. V1 permits only actions
+equivalent to `StartLocalTimer`, `SetApprovedFocusMode`,
+`LaunchApprovedTarget`, `ShowLocalChecklist`, and `ShowLocalNotification`.
 
-## 3. JNI / NDK Conventions [CRITICAL]
+- `LaunchApprovedTarget` resolves a local target ID, never a package/URI from a
+  command, import, or model response.
+- An imported template carries suggestions only. It cannot name an executable
+  package or add a new action type without local user approval.
+- Each action reports `Completed`, `Skipped`, or `Failed`; the first failure
+  ends the run. No recursive actions or loops.
+- A routine is immutable while it is executing. A new explicit run is required
+  after completion or failure.
+- The execution screen always shows the current action and a visible Stop
+  button. Stop is immediate and idempotent.
 
-The native layer is the highest-risk area. Follow exactly.
+**Accessibility is out of scope for v1.** Do not add an `AccessibilityService`,
+overlay, UI-node scraping, gesture injection, or screen-content capture. A
+future proposal would require a new constitution, threat model, permission
+review, and user authorization; it is not an incremental task.
 
-1. **One JNI file per engine.** `justsaid_whisper_jni.cpp` and
-   `justsaid_llm_jni.cpp`. Never mix whisper and llama symbols in one file.
-2. **Naming:** JNI functions use the full mangled package
-   `Java_com_justsaid_app_stt_WhisperEngine_<method>`. Kotlin `external fun`
-   declarations live in the matching wrapper class only.
-3. **Opaque handles:** Native context pointers (`whisper_context*`,
-   `llama_context*`) are passed to Kotlin as a `long` handle. Kotlin treats it
-   as opaque. Never dereference or arithmetic on it in Kotlin.
-4. **Lifecycle = init once, reuse, free once:**
-   - `nativeInit(modelPath, params) -> long handle`  (allocations happen HERE)
-   - `nativeInfer(handle, ...) -> result`            (no model realloc)
-   - `nativeFree(handle)`                              (idempotent; null-safe)
-   Reuse the context/state across audio chunks. Do **not** load the model per
-   chunk. See `docs/00-CONSTITUTION.md#native-memory`.
-5. **Memory safety:**
-   - Always release JNI local refs / `ReleaseStringUTFChars` /
-     `ReleasePrimitiveArrayCritical` on every path, including error paths.
-   - Guard every handle: `if (handle == 0) return error`.
-   - No raw `new`/`delete` for buffers reused across inference — preallocate in
-     `nativeInit`, reuse in `nativeInfer` (the "zero runtime allocation" goal;
-     realistically: **zero *per-chunk* allocation**, buffers sized at init).
-   - Free order for llama/whisper: free state → free context → free backend.
-6. **Threading:** Native inference runs on a background thread from Kotlin
-   (coroutine on `@DefaultDispatcher`). Never call `nativeInfer` on the main
-   thread. Thread count param = number of **physical** big cores (query at init).
-7. **No `abort()`/`exit()` in native code.** Return error codes; let Kotlin
-   surface a friendly message.
-8. **No logging of transcript or audio content in native code** in release
-   builds (`#ifndef NDEBUG` only).
+## 4. Command and Native Rules
 
----
-
-## 4. State Management (Manual Capture Lifecycle)
-
-Capture state is owned by `session/` and flows one direction:
-
-```
-Visible JustSaid activity (explicit user tap)
-   → CaptureSessionController (StateFlow<CaptureSessionState>)
-      → MicrophoneCaptureController (start/stop private mono buffer)
-         → on user stop:
-              → SttEngine (Phase 3) → LlmEngine (Phase 4)
-                 → user chooses retention → delete .wav [CRITICAL]
-```
-
-- `CaptureSessionState` is a sealed class: `Idle | Recording | Finalizing |
-  Processing | Completed | Failed`.
-- The microphone foreground service may start **only from a visible activity
-  after an explicit capture tap** and stops as soon as capture ends.
-- There is no automatic start, default-dialer role, call-state listener, or
-  accessibility-service dependency. A user starts and stops every session.
-- Audio is mono and every transcript segment is `UNKNOWN`; never infer a remote
-  caller or promise two-sided capture.
-
----
+- Typed activation is the baseline. Optional voice capture starts only from a
+  visible activity after a tap and is limited to a short command (15 seconds or
+  less). There is no background microphone service or wake word.
+- If voice capture creates a WAV, use private cache, delete it in `finally`
+  after STT, and verify deletion. Do not retain the transcript.
+- The local LLM receives a bounded command and a compact list of existing
+  routine names/IDs. Its structured response contains only `routineId` and
+  allowed slot values. Validate it in Kotlin before the execution gate.
+- Native contexts follow init once → infer → idempotent free. Never infer on the
+  main thread, never log speech/transcript content in release, and never
+  allocate large buffers per inference window.
 
 ## 5. Permissions Policy [CRITICAL]
 
-Request the **minimum** and only when needed: `RECORD_AUDIO`,
-`FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_MICROPHONE`, and
-`POST_NOTIFICATIONS` where required. `READ_CONTACTS` is optional and may only
-be requested for a later, user-initiated recipient picker. Do not declare
-`READ_CALL_LOG`, `READ_PHONE_STATE`, `ANSWER_PHONE_CALLS`, `MANAGE_OWN_CALLS`,
-or dialer-role components. Do not add an `AccessibilityService`. **`INTERNET`
-is declared but must be used ONLY by the downloader.** No external storage,
-location, camera, or contacts write. Justify any new permission in the PR
-description.
+Declare only what a completed phase needs:
 
----
+- `INTERNET` solely for the model downloader.
+- `RECORD_AUDIO` only for optional, visibly user-started voice commands.
+- `POST_NOTIFICATIONS` only for routine progress/completion notifications.
+- DND access is a user-granted system special access, requested only when a
+  routine first needs it.
 
-## 6. Definition of Done (every Phase)
+Do not declare a foreground microphone service, accessibility service, overlay,
+contacts, call log/state, dialer, SMS, storage, location, camera, notification
+listener, exact-alarm, boot receiver, or package-install permission in v1.
 
-- [ ] Compiles; `./gradlew :app:assembleDebug` passes.
-- [ ] Unit tests for pure logic pass on JVM (no device).
-- [ ] No new network calls outside `data/download/`.
-- [ ] No raw audio persisted; wav deletion verified where applicable.
-- [ ] All user strings in `strings.xml`; screens pass TalkBack + large-font.
-- [ ] Public functions have KDoc stating intent (not narrating code).
-- [ ] Handoff types match the "Data Handoff Boundaries" in your phase doc.
+## 6. Definition of Done
+
+- `:app:assembleDebug` and JVM tests pass.
+- No new network call exists outside `data/download/`.
+- Every action is schema-validated, locally approved, visible to the user, and
+  covered by a fake-gateway JVM test.
+- Unsupported/imported/model-generated actions fail closed.
+- Command audio and transcripts are not persisted; cleanup is verified.
+- User-visible strings, TalkBack descriptions, 48dp touch targets, and WCAG AA
+  contrast are checked.
+- Public functions have intent-focused KDoc and handoff types match the phase
+  document.

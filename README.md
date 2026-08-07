@@ -1,70 +1,97 @@
-# JustSaid
+# JustSaid *(temporary project name)*
 
-**Open-source, local-first Android call companion + on-device AI summarizer.**
-JustSaid records an explicitly user-started microphone note around a phone call,
-transcribes it on the device, and extracts promises and to-dos backed by
-verbatim proof. It is built for non-technical users (grandparents included).
+**An open-source, local-first Android routine runner.**
 
-> 🔒 **100% offline.** No cloud, accounts, analytics, or telemetry. Temporary
-> raw audio is deleted after processing. Retained text is stored locally in an
-> encrypted database.
+JustSaid helps a person start a repeatable, low-risk phone routine with one
+explicit action: a tap, Quick Settings tile, widget, or short on-device voice
+command. A routine is made from a small, auditable list of safe actions such as
+starting a local focus timer, enabling a user-approved focus mode, opening a
+user-approved app or deep link, and showing a local checklist.
 
-## What it does
+The app is not a call recorder, default dialer, VoIP service, general-purpose
+phone controller, or autonomous agent. It never automates payments, account
+security, messages, deletion, or submission.
 
-1. You open JustSaid and explicitly start a **call note session** before or
-   during a normal phone call. JustSaid is not your phone app or default dialer.
-2. It records **microphone audio only** into a private temporary buffer. The
-   local speaker is captured best; speakerphone may make the other party audible,
-   but remote audio is never guaranteed or attributed.
-3. When you stop the note, it runs **whisper.cpp** then a small **llama.cpp**
-   model entirely on-device to extract concise, proof-backed tasks.
-4. You review, save, export, or share the text result. JustSaid sends nothing
-   itself.
+> **Pivot status:** this documentation defines the routine-runner product.
+> Existing source code still contains the retired conversation-capture
+> prototype and must be migrated according to
+> [`docs/06-routine-backend-migration.md`](docs/06-routine-backend-migration.md)
+> before it is described as a routine runner.
 
-> **Important limitation:** JustSaid is not a two-sided carrier-call recorder.
-> Capture quality varies by device, headset, and speakerphone use. See
-> `docs/02-dialer-audio-capture.md` for the exact supported contract.
+## Product promise
 
-## Architecture at a glance
+> Start your personal phone routine privately. The app works from an explicit
+> command, runs only actions you approved, and never sends your data to a cloud.
 
-| Concern | Choice | Why |
-|---|---|---|
-| Session control | Explicit user-started capture session | Clear consent; no default-dialer role or hidden capture. |
-| Audio capture | `MIC`, mono, 16 kHz PCM | Supported local microphone input; speakerphone may improve audibility. |
-| STT | whisper.cpp via JNI | Fast on-device transcription. |
-| LLM | llama.cpp via JNI | Offline task extraction with code-enforced proof checks. |
-| Storage | Room + SQLCipher | Encrypted text-only history. |
-| Models | First-run download from Hugging Face | Weights are never bundled in the APK. |
+Example, after the user has created and approved a **Study** routine:
 
-## Repository layout
+1. The user taps **Start Study**, invokes the Quick Settings tile, or presses
+   the in-app microphone and says “start my study routine.”
+2. JustSaid starts a local timer, enables a focus mode the user previously
+   authorized, opens their chosen notes and audio apps, and shows their local
+   checklist.
+3. It reports each completed or skipped action. Unexpected state always stops
+   the routine; it never guesses a way forward.
 
-- **`AGENTS.md`** — contributor rulebook.
-- **`TESTING.md`** — local benchmarks and automated testing guidance.
-- **`docs/`** — architecture blueprint. Start with:
-  - `00-CONSTITUTION.md` — non-negotiable standards.
-  - `06-companion-backend-migration.md` — backend-only pivot plan and
-    agent-sized tasks.
+## What v1 can and cannot do
 
-## Build
+| Supported v1 actions | Never-supported actions |
+| --- | --- |
+| Start a local timer, show a local checklist, display a notification | Payments, purchases, transfers, subscriptions |
+| Enable a user-granted system focus/DND mode | Password, OTP, biometric, or account-recovery handling |
+| Launch a user-approved package or app link | Sending messages, emails, posts, or forms |
+| Resolve a local voice command to an existing routine | Deleting files/data, changing account/security settings |
+| Import a declarative routine template after review | Arbitrary scripts, arbitrary UI taps, background execution |
 
-Requires Android SDK 35, NDK r26+, and CMake 3.22+.
+The app uses whisper.cpp only for a short, explicitly initiated voice command
+and llama.cpp only to map that command to an **existing local routine ID** and
+its allowed slots. The model is never allowed to create an action, choose a
+package, generate a URL, or execute an imported workflow.
 
-```bash
-./gradlew :app:assembleDebug
+Voice commands are optional. Typed activation, a widget, and a Quick Settings
+tile are first-class paths. An always-listening wake word is deliberately out
+of scope because it would require persistent microphone access and introduce
+battery and privacy costs.
+
+## Privacy and sharing
+
+- All routine data and command processing stay on device. The only allowed
+  network code is the first-run model downloader.
+- Raw command audio is private temporary data and is deleted immediately after
+  transcription, whether transcription succeeds or fails.
+- The app stores no command-audio history or full command transcripts.
+- A future community library may distribute **declarative templates** through
+  an external channel such as GitHub. There is no public workflow platform in
+  this project, no accounts, and no remote execution. Every imported template
+  is untrusted until the user reviews it and maps its suggested targets to their
+  own approved targets.
+
+## Architecture
+
+```text
+Explicit user trigger
+  -> typed command / optional short voice command
+  -> local command resolver (existing routine IDs only)
+  -> RoutineExecutionGate
+  -> typed SafeActionExecutor
+  -> local execution receipt
 ```
 
-The first launch downloads STT and LLM weights into app-private storage. The
-current repository vendors whisper.cpp and llama.cpp source under
-`app/src/main/cpp/`; before public releases, maintainers must record and test
-their exact upstream revisions.
+The full contracts, safety rules, and phased migration are in [`docs/`](docs/).
+Start with [`docs/00-CONSTITUTION.md`](docs/00-CONSTITUTION.md) and
+[`AGENTS.md`](AGENTS.md).
 
-## Legal and safety
+## Development
 
-Recording and consent laws vary by region. JustSaid requires a first-run
-disclosure and an explicit user action for every recording. You are responsible
-for complying with the laws where you and the other party are located.
+```powershell
+.\gradlew.bat :app:assembleDebug
+.\gradlew.bat :app:testDebugUnitTest
+```
 
-## License
+See [`TESTING.md`](TESTING.md) for the mandatory safety, offline, and device
+checks.
 
-JustSaid is released under the MIT License. Vendored native dependencies retain
-their own licenses.
+## Name
+
+“JustSaid” is a placeholder while the project is renamed. The application ID
+and package names must not change until a separate, deliberate rename task.
